@@ -1,22 +1,39 @@
 package com.liskovsoft.browser.xwalk;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Paint;
 import android.os.Build.VERSION;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.AttributeSet;
-import android.webkit.*;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
+import android.webkit.ValueCallback;
+import android.webkit.WebBackForwardList;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebViewClient;
+import com.liskovsoft.browser.Browser;
 import com.liskovsoft.browser.addons.HeadersBrowserWebView;
 import com.liskovsoft.browser.addons.HeadersWebSettingsDecorator;
+import com.liskovsoft.sharedutils.mylogger.Log;
+import org.xwalk.core.XWalkSettings;
 import org.xwalk.core.XWalkView;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class XWalkWebViewAdapter extends HeadersBrowserWebView {
+    private static final String TAG = XWalkWebViewAdapter.class.getSimpleName();
     private final XWalkView mXWalkView;
     private final XWalkUIClientAdapter mXWalkUiClient;
     private XWalkResourceClientAdapter mResourceClient;
+    private WebSettings mSettingsDecorator;
+    private WebBackForwardList mWebBackForwardList;
 
     public XWalkWebViewAdapter(Context context) {
         this(null, context);
@@ -73,17 +90,17 @@ public class XWalkWebViewAdapter extends HeadersBrowserWebView {
 
     @Override
     public void setInitialScale(int scaleInPercent) {
-        mXWalkView.setInitialScale(scaleInPercent);
+        Browser.waitInit(() -> mXWalkView.setInitialScale(scaleInPercent));
     }
 
     @Override
     public void loadUrl(String url, Map<String, String> additionalHttpHeaders) {
-        mXWalkView.loadUrl(url, additionalHttpHeaders);
+        Browser.waitInit(() -> mXWalkView.loadUrl(url, additionalHttpHeaders));
     }
 
     @Override
     public void loadUrl(String url) {
-        mXWalkView.loadUrl(url);
+        Browser.waitInit(() -> mXWalkView.loadUrl(url));
     }
 
     @Override
@@ -121,11 +138,24 @@ public class XWalkWebViewAdapter extends HeadersBrowserWebView {
 
     @Override
     public WebSettings getSettings() {
-        if (mXWalkView == null) {
-            return null;
+        if (mSettingsDecorator == null) {
+            if (mXWalkView != null) {
+                XWalkSettings settings = null;
+
+                try {
+                    settings = mXWalkView.getSettings();
+                } catch (RuntimeException e) { // RuntimeException: Crosswalk's APIs are not ready yet
+                    Log.e(TAG, e.getMessage());
+                    e.printStackTrace();
+                }
+
+                if (settings != null) {
+                    mSettingsDecorator = new HeadersWebSettingsDecorator(mHeaders, new XWalkWebSettingsAdapter(settings));
+                }
+            }
         }
 
-        return new HeadersWebSettingsDecorator(mHeaders, new XWalkWebSettingsAdapter(mXWalkView.getSettings()));
+        return mSettingsDecorator;
     }
 
     public XWalkView getXWalkView() {
@@ -169,12 +199,16 @@ public class XWalkWebViewAdapter extends HeadersBrowserWebView {
     }
 
     private WebBackForwardList getWebBackForwardListAdapter(boolean success) {
-        // WebBackForwardList doesn't have a constructor on api < 17
-        if (VERSION.SDK_INT < 17) {
-            return super.copyBackForwardList();
+        if (mWebBackForwardList == null) {
+            // WebBackForwardList doesn't have a constructor on api < 17
+            if (VERSION.SDK_INT < 17) {
+                mWebBackForwardList = super.copyBackForwardList();
+            } else {
+                mWebBackForwardList = new WebBackForwardListAdapter(success);
+            }
         }
 
-        return new WebBackForwardListAdapter(success);
+        return mWebBackForwardList;
     }
 
     @Override
@@ -187,5 +221,53 @@ public class XWalkWebViewAdapter extends HeadersBrowserWebView {
     public void clearCache(boolean includeDiskFiles) {
         mXWalkView.clearCache(includeDiskFiles);
         super.clearCache(includeDiskFiles);
+    }
+
+    @Override
+    public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
+        Log.d(TAG, "XWalkView: Soft keyboard has appeared on the screen");
+        return mXWalkView.onCreateInputConnection(outAttrs);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        Log.d(TAG, "XWalkView: Dispatching key " + event);
+        return mXWalkView.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public void bringToFront() {
+        if (mXWalkView != null) {
+            mXWalkView.bringToFront();
+        }
+    }
+
+    @Override
+    public void bringChildToFront(View child) {
+        if (mXWalkView != null) {
+            mXWalkView.bringChildToFront(child);
+        }
+    }
+
+    @SuppressLint("MissingSuperCall")
+    @Override
+    public void requestLayout() {
+        if (mXWalkView != null) {
+            mXWalkView.requestLayout();
+        }
+    }
+
+    @Override
+    public void forceLayout() {
+        if (mXWalkView != null) {
+            mXWalkView.forceLayout();
+        }
+    }
+
+    @Override
+    public void invalidate() {
+        if (mXWalkView != null) {
+            mXWalkView.invalidate();
+        }
     }
 }

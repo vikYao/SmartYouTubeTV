@@ -23,6 +23,7 @@ import com.google.android.exoplayer2.ExoPlayerFactory;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.RenderersFactory;
 import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.drm.DefaultDrmSessionManager;
 import com.google.android.exoplayer2.drm.DrmSessionManager;
 import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
@@ -31,7 +32,6 @@ import com.google.android.exoplayer2.drm.HttpMediaDrmCallback;
 import com.google.android.exoplayer2.drm.UnsupportedDrmException;
 import com.google.android.exoplayer2.extractor.DefaultExtractorsFactory;
 import com.google.android.exoplayer2.mediacodec.MediaCodecRenderer.DecoderInitializationException;
-import com.google.android.exoplayer2.mediacodec.MediaCodecUtil.DecoderQueryException;
 import com.google.android.exoplayer2.source.BehindLiveWindowException;
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
 import com.google.android.exoplayer2.source.ExtractorMediaSource;
@@ -54,16 +54,21 @@ import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultAllocator;
 import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
 import com.google.android.exoplayer2.upstream.HttpDataSource;
+import com.google.android.exoplayer2.util.EventLogger;
 import com.google.android.exoplayer2.util.Util;
 import com.liskovsoft.exoplayeractivity.BuildConfig;
 import com.liskovsoft.exoplayeractivity.R;
 import com.liskovsoft.sharedutils.helpers.FileHelpers;
+import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.helpers.ExtendedDataHolder;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.helpers.PlayerUtil;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.MyDashManifestParser;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.PlayerInterface;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.subalignment.MyDefaultRenderersFactory;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.subalignment.SubtitleRendererDecorator;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.widgets.TextToggleButton;
 import com.liskovsoft.smartyoutubetv.prefs.SmartPreferences;
 
@@ -97,9 +102,11 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     public static final int RENDERER_INDEX_VIDEO = 0;
     public static final int RENDERER_INDEX_AUDIO = 1;
     public static final int RENDERER_INDEX_SUBTITLE = 2;
-    private static final int UI_SHOW_TIMEOUT_MS = 2_000;
+    private static final int UI_SHOW_TIMEOUT_LONG_MS = 5_000;
+    private static final int UI_SHOW_TIMEOUT_SHORT_MS = 2_000;
+    private static final int MAX_RESTORE_RETRY_COUNT = 5;
 
-    protected EventLogger mEventLogger;
+    protected MyEventLogger mEventLogger;
 
     protected SimpleExoPlayer mPlayer;
     protected DefaultTrackSelector mTrackSelector;
@@ -112,7 +119,7 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
 
     private DataSource.Factory mMediaDataSourceFactory;
 
-    protected int mRetryCount;
+    protected int mRestoreRetryCount;
     protected boolean mNeedRetrySource;
     protected boolean mShouldAutoPlay;
     protected LinearLayout mPlayerTopBar;
@@ -132,6 +139,7 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     }
 
     private Intent mIntent;
+    private int mDeviceRam;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -152,7 +160,7 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
 
         // shouldAutoPlay = true;
         clearResumePosition();
-        mMediaDataSourceFactory = buildDataSourceFactory(true);
+        mMediaDataSourceFactory = buildDataSourceFactory(false);
         mMainHandler = new Handler();
 
         if (CookieHandler.getDefault() != DEFAULT_COOKIE_MANAGER) {
@@ -176,9 +184,20 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
         mSimpleExoPlayerView.setControllerVisibilityListener(this);
         // hide ui player by default
         mSimpleExoPlayerView.setControllerAutoShow(false);
-        mSimpleExoPlayerView.setControllerShowTimeoutMs(UI_SHOW_TIMEOUT_MS);
+        boolean decreaseTimeout = CommonApplication.getPreferences().getDecreasePlayerUITimeout();
+        mSimpleExoPlayerView.setControllerShowTimeoutMs(decreaseTimeout ? UI_SHOW_TIMEOUT_SHORT_MS : UI_SHOW_TIMEOUT_LONG_MS);
 
         mPlayerTopBar.setVisibility(View.GONE);
+
+        SubtitleRendererDecorator.configureSubtitleView(mSimpleExoPlayerView);
+
+        mDeviceRam = Helpers.getDeviceRam(getActivity());
+        // If ram is too big, bigger then max int value DeviceRam will return a negative number...
+        // use 196MB as that can only happens if device has more than 17GB of RAM, so 196 is enough and safe
+        // https://github.com/yuliskov/SmartYouTubeTV/issues/532
+        if (mDeviceRam < 0) {
+            mDeviceRam = 196000000;
+        }
     }
 
     public void setIntent(Intent intent) {
@@ -200,18 +219,36 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
 
             mPlayer = ExoPlayerFactory.newSimpleInstance(getActivity(), getRenderersFactory(), mTrackSelector, getLoadControl(), getDrmManager(intent), BANDWIDTH_METER);
 
+            enableAudioFocus(mPlayer);
+
+            //Log.d(TAG, "High Bit Depth supported ? " + VpxLibrary.isHighBitDepthSupported());
+
             mPlayer.addListener(this);
-            mPlayer.addListener(mEventLogger);
-            mPlayer.setAudioDebugListener(mEventLogger);
-            mPlayer.setVideoDebugListener(mEventLogger);
-            mPlayer.setMetadataOutput(mEventLogger);
+            
+            if (BuildConfig.DEBUG) {
+                mPlayer.addListener(mEventLogger);
+                mPlayer.setAudioDebugListener(mEventLogger);
+                mPlayer.setVideoDebugListener(mEventLogger);
+                mPlayer.addMetadataOutput(mEventLogger);
+
+                mPlayer.addAnalyticsListener(new EventLogger(mTrackSelector));
+
+                //mPlayer.addAnalyticsListener(new PlaybackStatsListener(true, (eventTime, playbackStats) -> Log.d("PlaybackStatsListener", playbackStats)));
+            }
 
             mSimpleExoPlayerView.setPlayer(mPlayer);
             mPlayer.setPlayWhenReady(false); // give a chance to switch/restore track before play
         }
 
         if (needNewPlayer || mNeedRetrySource) {
-            MediaSource mediaSource = extractMediaSource(intent);
+            MediaSource mediaSource = null;
+
+            try {
+                mediaSource = extractMediaSource(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+                MessageHelpers.showLongMessage(getContext(), Helpers.toString(e));
+            }
 
             if (mediaSource == null) {
                 return;
@@ -233,6 +270,17 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
                 Log.d(TAG, "Video extract starting...");
                 mExtractStartMS = System.currentTimeMillis();
             }
+        }
+    }
+
+    private void enableAudioFocus(SimpleExoPlayer player) {
+        if (player != null) {
+            AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.CONTENT_TYPE_MOVIE)
+                    .build();
+
+            player.setAudioAttributes(audioAttributes, true);
         }
     }
 
@@ -320,6 +368,8 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     private RenderersFactory getRenderersFactory() {
         DefaultRenderersFactory factory = new MyDefaultRenderersFactory(getActivity());
         factory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
+        //factory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER);
+        //factory.setMediaCodecSelector(new BlackListMediaCodecSelector());
         return factory;
     }
 
@@ -328,14 +378,30 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
      * @return load control
      */
     private DefaultLoadControl getLoadControl() {
-        int minBufferMs = DefaultLoadControl.DEFAULT_MIN_BUFFER_MS * 4;
-        int maxBufferMs = DefaultLoadControl.DEFAULT_MAX_BUFFER_MS * 2;
-        int bufferForPlaybackMs = DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS;
-        int bufferForPlaybackAfterRebufferMs = DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS;
-        return new DefaultLoadControl.Builder()
-                .setAllocator(new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
-                .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs)
-                .createDefaultLoadControl();
+        DefaultLoadControl.Builder baseBuilder = new DefaultLoadControl.Builder();
+        String bufferType = CommonApplication.getPreferences().getPlayerBufferType();
+
+        if (bufferType.equals(SmartPreferences.PLAYER_BUFFER_TYPE_HIGH)) {
+            int minBufferMs = 30000; // 30 seconds
+            int maxBufferMs = 36000000; // technical infinity, recommended here a very high number, the max will be based on setTargetBufferBytes() value
+            int bufferForPlaybackMs = 500; // half a seconds can be lower as lowe as 250
+            int bufferForPlaybackAfterRebufferMs = 3000; // 3 seconds
+            baseBuilder
+                    .setAllocator(new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+                    .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs)
+                    .setTargetBufferBytes(mDeviceRam);
+        } else if (bufferType.equals(SmartPreferences.PLAYER_BUFFER_TYPE_LOW)) {
+            baseBuilder
+                    .setBufferDurationsMs(
+                    DefaultLoadControl.DEFAULT_MAX_BUFFER_MS / 3,
+                    DefaultLoadControl.DEFAULT_MAX_BUFFER_MS / 3,
+                    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS / 3,
+                    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS / 3);
+        }
+
+        // medium buffer by default
+
+        return baseBuilder.createDefaultLoadControl();
     }
 
     private DrmSessionManager<FrameworkMediaCrypto> getDrmManager(Intent intent) {
@@ -463,6 +529,11 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     }
 
     private MediaSource buildMPDMediaSource(Uri uri, String mpdContent) {
+        if (mpdContent == null || mpdContent.isEmpty()) {
+            Log.e(TAG, "Can't build media source. MpdContent is null or empty. " + mpdContent);
+            return null;
+        }
+
         // Are you using FrameworkSampleSource or ExtractorSampleSource when you build your player?
         DashMediaSource dashSource = new DashMediaSource.Factory(
                 new DefaultDashChunkSource.Factory(mMediaDataSourceFactory),
@@ -474,7 +545,7 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     }
 
     private DashManifest getManifest(Uri uri, InputStream mpdContent) {
-        DashManifestParser parser = new DashManifestParser();
+        DashManifestParser parser = new MyDashManifestParser();
         DashManifest result;
         try {
             result = parser.parse(uri, mpdContent);
@@ -485,7 +556,7 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     }
 
     private DashManifest getManifest(Uri uri, String mpdContent) {
-        DashManifestParser parser = new DashManifestParser();
+        DashManifestParser parser = new MyDashManifestParser();
         DashManifest result;
         try {
             result = parser.parse(uri, FileHelpers.toStream(mpdContent));
@@ -614,36 +685,48 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
     @Override
     public void onPlayerError(ExoPlaybackException e) {
         String errorString = null;
-        boolean isCodecError = false;
+        boolean isSourceError = false;
+        boolean isDecoderError = false;
 
         if (e.type == ExoPlaybackException.TYPE_RENDERER) {
             Exception cause = e.getRendererException();
             if (cause instanceof DecoderInitializationException) {
                 // Special case for decoder initialization failures.
                 DecoderInitializationException decoderInitializationException = (DecoderInitializationException) cause;
-                if (decoderInitializationException.decoderName == null) {
-                    if (decoderInitializationException.getCause() instanceof DecoderQueryException) {
-                        errorString = getString(R.string.error_querying_decoders);
-                    } else if (decoderInitializationException.secureDecoderRequired) {
-                        errorString = getString(R.string.error_no_secure_decoder, decoderInitializationException.mimeType);
-                    } else {
-                        errorString = getString(R.string.error_no_decoder, decoderInitializationException.mimeType);
-                    }
-                } else {
-                    errorString = getString(R.string.error_instantiating_decoder, decoderInitializationException.decoderName);
-                }
+
+                errorString = decoderInitializationException.diagnosticInfo;
+
+                // Ver. 2.9.6
+                //if (decoderInitializationException.decoderName == null) {
+                //    if (decoderInitializationException.getCause() instanceof DecoderQueryException) {
+                //        errorString = getString(R.string.error_querying_decoders);
+                //    } else if (decoderInitializationException.secureDecoderRequired) {
+                //        errorString = getString(R.string.error_no_secure_decoder, decoderInitializationException.mimeType);
+                //    } else {
+                //        errorString = getString(R.string.error_no_decoder, decoderInitializationException.mimeType);
+                //    }
+                //} else {
+                //    errorString = getString(R.string.error_instantiating_decoder, decoderInitializationException.decoderName);
+                //}
+            } else {
+                errorString = e.getRendererException().getLocalizedMessage();
             }
 
-            isCodecError = true;
+            isDecoderError = true;
         } else if (e.type == ExoPlaybackException.TYPE_SOURCE) {
-            // Response code: 403
+            // Response code: 403 (url not found)
             errorString = e.getSourceException().getLocalizedMessage();
+            isSourceError = true;
         } else if (e.type == ExoPlaybackException.TYPE_UNEXPECTED) {
             errorString = e.getUnexpectedException().getLocalizedMessage();
         }
 
-        if (errorString != null && !getHidePlaybackErrors()) {
-            showToast(errorString);
+        if (errorString != null) {
+            Log.e(TAG, "Playback error: " + errorString);
+
+            if (!getHidePlaybackErrors()) {
+                showToast(errorString);
+            }
         }
 
         mNeedRetrySource = true;
@@ -652,21 +735,34 @@ public abstract class PlayerCoreFragment extends Fragment implements OnClickList
             clearResumePosition();
         } else {
             updateResumePosition();
-            // show retry button to the options
-            //updateButtonVisibilities();
         }
 
-        if (isCodecError) {
-            restorePlayback();
+        if (isDecoderError) {
+            boolean restored = restorePlayback();
+
+            if (!restored) {
+                showToast(getString(R.string.exo_video_decoder_error));
+            }
+        } else if (isSourceError) {
+            boolean restored = restorePlayback();
+
+            if (!restored) {
+                showToast(getString(R.string.exo_video_link_error));
+                // closing player
+                onBackPressed();
+            }
         }
     }
 
     /**
      * Trying to restore the playback without user interaction
      */
-    private void restorePlayback() {
-        if (mRetryCount++ < 5) {
+    private boolean restorePlayback() {
+        if (mRestoreRetryCount++ < MAX_RESTORE_RETRY_COUNT) {
             new Handler(Looper.getMainLooper()).postDelayed(this::initializePlayer, 500);
+            return true;
+        } else {
+            return false;
         }
     }
 

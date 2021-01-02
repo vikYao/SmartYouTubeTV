@@ -1,4 +1,6 @@
+apply from: gradle.ext.sharedModulesConstants
 apply plugin: 'com.android.library'
+
 
 android {
     // FIX: Default interface methods are only supported starting with Android N (--min-api 24)
@@ -20,7 +22,7 @@ android {
         versionName "0.7.2"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-
+        buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
     }
 
     buildTypes {
@@ -37,6 +39,9 @@ android {
     productFlavors {
         lite {}
         full {}
+        kids {
+            matchingFallbacks = ['lite']
+        }
     }
 
     lintOptions {
@@ -46,10 +51,10 @@ android {
 }
 
 dependencies {
-    androidTestImplementation(project.properties.espressoCoreVersion, {
+    androidTestImplementation('com.android.support.test.espresso:espresso-core:' + espressoCoreVersion, {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    testImplementation project.properties.junitVersion
+    testImplementation 'junit:junit:' + junitVersion
 
     implementation project(path: ':sharedutils')
 
@@ -59,29 +64,26 @@ dependencies {
     implementation project(path: ':browser')
 
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation project.properties.appCompatXVersion
-    implementation project.properties.constraintLayoutXVersion
-    implementation project.properties.collectionXVersion
+    implementation 'androidx.appcompat:appcompat:' + appCompatXLibraryVersion
+    implementation 'androidx.constraintlayout:constraintlayout:' + constraintLayoutXVersion
+    implementation 'androidx.collection:collection:' + appCompatXLibraryVersion
 
-    api project.properties.exoplayerVersion
+    api 'com.amazon.android:exoplayer:' + amazonExoplayerVersion
+    // api 'com.google.android.exoplayer:exoplayer:' + exoplayerVersion
 
-    //api project.properties.amazonExoplayerVersion
+    implementation 'com.amazon.android:extension-okhttp:' + amazonExoplayerVersion
+    // implementation 'com.google.android.exoplayer:extension-okhttp:' + exoplayerVersion
 
-    implementation project.properties.previewSeekBarDevVersion
-    implementation project.properties.previewSeekBarExoDevVersion
+    // include vp9 extension
+    // NOTE: NoSuchMethodError when using 'transitive' prop
+    // implementation project(path: ':exoplayer-extension-vp9')
 
-    implementation project.properties.glideVersion
-    annotationProcessor project.properties.annotationXVersion
-    annotationProcessor project.properties.glideCompilerVersion
+    implementation 'com.github.yuliskov.PreviewSeekBar:previewseekbar:' + previewSeekBarDevVersion
+    implementation 'com.github.yuliskov.PreviewSeekBar:previewseekbar-exoplayer:' + previewSeekBarExoDevVersion
 
-    implementation project.properties.multiDexVersion
+    implementation 'com.github.bumptech.glide:glide:' + glideVersion
+    annotationProcessor 'com.github.bumptech.glide:compiler:' + glideVersion
+    annotationProcessor 'androidx.annotation:annotation:' + appCompatXLibraryVersion
 
-//    implementation('androidx.media:media:1.0.0') {
-//        force = true
-//    }
-
-    // include vp9 extensions
-    //implementation (project(path: ':exoplayer-extension-vp9'), {
-    //    transitive = false
-    //})
+    implementation 'com.android.support:multidex:' + multiDexVersion
 }

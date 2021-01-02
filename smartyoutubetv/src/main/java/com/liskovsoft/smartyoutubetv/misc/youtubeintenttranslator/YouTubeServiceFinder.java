@@ -34,6 +34,10 @@ public class YouTubeServiceFinder implements ServiceFinder {
                 mIsPersistent = true;
                 mDefaultUrl = params.getWatchLaterPageUrl();
                 break;
+            case SmartPreferences.HISTORY_PAGE:
+                mIsPersistent = true;
+                mDefaultUrl = params.getHistoryPageUrl();
+                break;
             case SmartPreferences.DEFAULT_PAGE:
                 mIsPersistent = params.isMainPagePersistent();
                 mDefaultUrl = params.getMainPageUrl();
@@ -45,7 +49,7 @@ public class YouTubeServiceFinder implements ServiceFinder {
             mDefaultUrl = params.getMainPageUrl();
         }
 
-        mTranslator = new YouTubeIntentTranslator(mDefaultUrl);
+        mTranslator = new YouTubeIntentTranslator(context, mDefaultUrl);
     }
 
     @Override
@@ -61,17 +65,16 @@ public class YouTubeServiceFinder implements ServiceFinder {
 
     @Override
     public Intent transformIntent(Intent origin) {
-        Log.d(TAG, "Intent before transform: " + origin.getData());
+        Log.d(TAG, "Intent before transform: " + origin.toUri(0));
 
-        Intent result;
+        Intent result = mTranslator.translate(origin);
+        boolean intentIsEmpty = result == null || result.getData() == null; // doesn't contain url data
 
-        if (mIsPersistent && origin.getData() == null) {
+        if (intentIsEmpty) {
             result = new Intent(Intent.ACTION_VIEW, Uri.parse(mDefaultUrl));
-        } else {
-            result = mTranslator.translate(origin);
         }
 
-        Log.d(TAG, "Intent after transform: " + result.getData());
+        Log.d(TAG, "Intent after transform: " + result.toUri(0));
 
         return result;
     }

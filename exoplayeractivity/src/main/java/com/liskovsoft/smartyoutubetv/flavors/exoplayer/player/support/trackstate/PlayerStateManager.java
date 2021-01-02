@@ -2,7 +2,6 @@ package com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.trackstat
 
 import android.os.Handler;
 import android.util.Pair;
-import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
@@ -11,9 +10,14 @@ import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector.SelectionOverride;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector.MappedTrackInfo;
+import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.ExoPlayerBaseFragment;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.ExoPlayerFragment;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.PlayerCoreFragment;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Restores saved position, quality and subtitles of the video
@@ -22,16 +26,18 @@ public class PlayerStateManager extends PlayerStateManagerBase {
     private static final String TAG = PlayerStateManager.class.getSimpleName();
     private static final int RENDERER_INDEX_VIDEO = PlayerCoreFragment.RENDERER_INDEX_VIDEO;
     private static final int RENDERER_INDEX_SUBTITLE = PlayerCoreFragment.RENDERER_INDEX_SUBTITLE;
-    private static final long MIN_PERSIST_DURATION_MILLIS = 5 * 60 * 1000; // don't save if total duration < 5 min (most of songs)
-    private static final long MAX_TRAIL_DURATION_MILLIS = 3 * 1000; // don't save if 3 sec of unseen video remains
-    private static final long MAX_START_DURATION_MILLIS = 30 * 1000; // don't save if video just starts playing < 30 sec
+    private static final long MIN_PERSIST_DURATION_MILLIS = 10 * 60 * 1000; // don't save if total duration < 10 min (most of songs)
+    private static final long MAX_TRAIL_DURATION_MILLIS = 60 * 1000; // don't save if 60 sec of unseen video remains
+    private static final long MAX_START_DURATION_MILLIS = 60 * 1000; // don't save if video just starts playing < 30 sec
     private static final long DECODER_INIT_TIME_MS = 1_000;
     private final ExoPlayerBaseFragment mPlayerFragment;
-    private final SimpleExoPlayer mPlayer;
-    private final DefaultTrackSelector mSelector;
+    private SimpleExoPlayer mPlayer;
+    private DefaultTrackSelector mSelector;
+    private static List<String> sRestored = new ArrayList<>();
 
     public PlayerStateManager(ExoPlayerBaseFragment playerFragment, SimpleExoPlayer player, DefaultTrackSelector selector) {
         super(playerFragment.getActivity());
+
         mPlayerFragment = playerFragment;
         mPlayer = player;
         mSelector = selector;
@@ -43,6 +49,11 @@ public class PlayerStateManager extends PlayerStateManagerBase {
      * All earlier calls might produce an error because {@link MappedTrackInfo#getTrackGroups(int) getTrackGroups} could be null
      */
     public void restoreState() {
+        if (mPlayer == null || mSelector == null) {
+            Log.d(TAG, "Not fully initialized!");
+            return;
+        }
+
         restoreVideoTrack();
         restoreAudioTrack();
         restoreSubtitleTrack();
@@ -55,6 +66,11 @@ public class PlayerStateManager extends PlayerStateManagerBase {
      * All earlier calls might produce an error because {@link MappedTrackInfo#getTrackGroups(int) getTrackGroups} could be null
      */
     public void restoreStatePartially() {
+        if (mPlayer == null || mSelector == null) {
+            Log.d(TAG, "Not fully initialized!");
+            return;
+        }
+
         restoreVideoTrack();
     }
 
@@ -96,12 +112,29 @@ public class PlayerStateManager extends PlayerStateManagerBase {
     }
 
     private void restoreTrackPosition() {
-        String title = mPlayerFragment.getMainTitle() + mPlayer.getDuration(); // create something like hash
+        long posPercents = CommonApplication.getPreferences().getCurrentVideoPosition();
 
-        long pos = findProperVideoPosition(title);
+        // prevent from restoring same data on two different video
+        CommonApplication.getPreferences().setCurrentVideoPosition(-1);
 
-        if (pos != C.TIME_UNSET && pos != 0){
-            mPlayer.seekTo(pos);
+        Log.d(TAG, "Real position of the video in percents: " + posPercents);
+
+        long posMs;
+
+        long duration = mPlayer.getDuration();
+        
+        String title = mPlayerFragment.getMainTitle() + duration; // create something like hash
+
+        if (posPercents < 0 || posPercents > 97 || sRestored.contains(title)) { // app just started, video opened
+            posMs = findProperVideoPosition(title);
+        } else {
+            posMs = (duration / 100) * posPercents;
+            sRestored.add(title); // restore from web once, then use local data
+        }
+
+        if (posMs > MAX_START_DURATION_MILLIS &&
+            posMs < (duration - MAX_TRAIL_DURATION_MILLIS)) {
+            mPlayer.seekTo(posMs);
         }
     }
 
@@ -180,6 +213,11 @@ public class PlayerStateManager extends PlayerStateManagerBase {
     }
 
     public void persistState() {
+        if (mPlayer == null || mSelector == null) {
+            Log.d(TAG, "Not fully initialized!");
+            return;
+        }
+
         Format videoFormat = mPlayer.getVideoFormat();
         Format audioFormat = mPlayer.getAudioFormat();
 

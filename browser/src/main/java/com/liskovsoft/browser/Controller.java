@@ -34,6 +34,7 @@ import androidx.appcompat.view.ActionMode;
 import com.liskovsoft.browser.IntentHandler.UrlData;
 import com.liskovsoft.browser.UI.ComboViews;
 import com.liskovsoft.browser.xwalk.XWalkInitHandler;
+import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 
@@ -146,7 +147,20 @@ public class Controller implements UiController, WebViewController, ActivityCont
         } catch (Exception e) {
             // User should select Chrome WebView provider in Developer Options
             // Android TV Developer Options: http://corochann.com/how-to-enable-developer-mode-in-android-tv-216.html
-            MessageHelpers.showLongMessage(mActivity, R.string.select_webview_provider_msg);
+            // You can choose your WebView provider by enabling Developer Options and selecting WebView implementation.
+            // You can use any compatible Chrome version (Dev, Beta or Stable) that is installed on your device or the standalone Webview APK to act
+            // as the WebView implementation.
+
+            // 1) Show message that webview should be uninstalled
+            String msg = mActivity.getResources().getString(R.string.select_webview_provider_msg);
+            MessageHelpers.showLongMessage(mActivity, msg + "\n" + e.getMessage());
+
+            // 2) Remove webview package with wrong architecture
+            Helpers.removePackage(mActivity, "com.google.android.webview");
+
+            // 3) Install webview from ApkMirror:
+            // https://www.apkmirror.com/apk/google-inc/android-system-webview/
+
             Log.d(TAG, e);
             e.printStackTrace();
         }
@@ -168,36 +182,34 @@ public class Controller implements UiController, WebViewController, ActivityCont
     }
 
     /**
-     * NOTE: entry point!
+     * NOTE: entry point!<br/>
      * Actually here restoration process begins.
-     * @param icicle
-     * @param intent
      */
     public void doStart(Bundle icicle, Intent intent) {
         // NOTE: restore callback is broken
         // onRestoreControllerState(icicle);
 
-        long currentTabId = mTabControl.canRestoreState(icicle, false);
-        if (currentTabId == -1) { // no saved state
-            Log.i(TAG, "Browser state not found. Opening home page...");
-            openTabToHomePage();
-        } else {
-            Log.d(TAG, "Restoring browser state...");
-            boolean needsRestoreAllTabs = mUi.needsRestoreAllTabs();
-            // TODO: restore incognito tabs not implemented
-            mTabControl.restoreState(icicle, currentTabId, false, needsRestoreAllTabs);
-            List<Tab> tabs = mTabControl.getTabs();
-
-            mUi.updateTabs(tabs);
-            // TabControl.restoreState() will create a new tab even if
-            // restoring the state fails.
-            setActiveTab(mTabControl.getCurrentTab());
-        }
-
         // Intent is non-null when framework thinks the browser should be
         // launching with a new intent (icicle is null).
         if (intent != null) {
             mIntentHandler.onNewIntent(intent);
+        } else {
+            long currentTabId = mTabControl.canRestoreState(icicle, false);
+            if (currentTabId == -1) { // no saved state
+                Log.i(TAG, "Browser state not found. Opening home page...");
+                openTabToHomePage();
+            } else {
+                Log.d(TAG, "Restoring browser state...");
+                boolean needsRestoreAllTabs = mUi.needsRestoreAllTabs();
+                // TODO: restore incognito tabs not implemented
+                mTabControl.restoreState(icicle, currentTabId, false, needsRestoreAllTabs);
+                List<Tab> tabs = mTabControl.getTabs();
+
+                mUi.updateTabs(tabs);
+                // TabControl.restoreState() will create a new tab even if
+                // restoring the state fails.
+                setActiveTab(mTabControl.getCurrentTab());
+            }
         }
     }
 
@@ -979,25 +991,25 @@ public class Controller implements UiController, WebViewController, ActivityCont
         // Dismiss the subwindow if applicable.
         dismissSubWindow(appTab);
 
-        // Since we might kill the WebView, remove it from the
-        // content view first.
-        mUi.detachTab(appTab);
-
-        // Recreate the main WebView after destroying the old one.
-        mTabControl.recreateWebView(appTab);
-
-        // TODO: analyze why the remove and add are necessary
-        mUi.attachTab(appTab);
+        //// Since we might kill the WebView, remove it from the
+        //// content view first.
+        //mUi.detachTab(appTab);
+        //
+        //// Recreate the main WebView after destroying the old one.
+        //mTabControl.recreateWebView(appTab);
+        //
+        //// TODO: analyze why the remove and add are necessary
+        //mUi.attachTab(appTab);
 
         if (mTabControl.getCurrentTab() != appTab) {
             switchToTab(appTab);
-            loadUrlDataIn(appTab, urlData);
         } else {
             // If the tab was the current tab, we have to attach
             // it to the view system again.
             setActiveTab(appTab);
-            loadUrlDataIn(appTab, urlData);
         }
+
+        loadUrlDataIn(appTab, urlData);
     }
 
     protected void pageUp() {

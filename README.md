@@ -1,12 +1,23 @@
+"[SmartYouTubeTV] is being sponsored by the following tool; please help to support us by taking a look and signing up to a free trial"
+<a href="https://tracking.gitads.io/?repo=SmartYouTubeTV"> <img src="https://images.gitads.io/SmartYouTubeTV" alt="GitAds"/> </a>
+
 ![Logo of SmartYouTubeTV](screenshots/smartyoutubetv-logo_small.png "Logo of SmartYouTubeTV") SmartYouTubeTV
 =========
 
 [![MPLv2 License](http://img.shields.io/badge/license-MPLv2-blue.svg?style=flat-square)](https://www.mozilla.org/MPL/2.0/)
 
+## Deprecation Notice
+
+**This app is no longer updated.**
+
+For a better YouTube experience on Android TV check out **[SmartTubeNext](https://github.com/yuliskov/SmartTubeNext)**
+
+---
+
 __SmartYouTubeTV: A YouTube client for set-top boxes and Android-based TVs:__
 
  * <a href="https://t.me/SmartYouTubeTV">Telegram group</a>
- * <a href="https://smartyoutubetv.github.io/#comment-3432484129" target="_blank">Visit discussion on the official page</a>
+ * <a href="https://smartyoutubetv.github.io/#disqus_thread" target="_blank">Visit discussion on the official page</a>
 
 ### Features:
 
@@ -69,6 +80,11 @@ If you want to support my developments you are welcome to buy me a cup of coffee
  * __[javierpz](https://github.com/javierpz)__ (cast fix)
  * __[TheRMaverick](https://github.com/TheRMaverick)__ (German language)
  * __[Maikell84](https://github.com/Maikell84)__ (misc fixes)
+ * __[foreveryoungforty](https://github.com/foreveryoungforty)__ (Dutch language)
+ * __[bubuleur](https://github.com/bubuleur)__ (French language)
+ * __[otava5](https://github.com/otava5)__ (Czech language)
+ * __[WaggBR](https://github.com/WaggBR)__ (Brazilian Portuguese language)
+ * __[itzxeon78](https://github.com/itzxeon78)__ (Spanish language)
 
 ### Screens:
 ![Screenshot of SmartYouTubeTV](screenshots/smartyoutubetv_screenshot_01.jpg "Screenshot of SmartYouTubeTV")

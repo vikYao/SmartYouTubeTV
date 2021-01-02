@@ -11,7 +11,17 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <!-- NOTE: use older sdk -->
-    <uses-sdk tools:overrideLibrary="org.xwalk.core, com.algolia.instantsearch.voice, androidx.leanback, androidx.tvprovider, com.github.rubensousa.previewseekbar, com.github.rubensousa.previewseekbar.exoplayer"/>
+    <uses-sdk tools:overrideLibrary="
+        org.xwalk.core,
+        com.algolia.instantsearch.voice,
+        androidx.leanback, androidx.tvprovider,
+        com.github.rubensousa.previewseekbar,
+        com.github.rubensousa.previewseekbar.exoplayer,
+        com.google.android.exoplayer2.ext.vp9,
+        com.google.android.exoplayer2.testutil,
+        com.google.android.exoplayer2.ext.okhttp,
+        com.google.firebase.crashlytics,
+        com.google.firebase.iid"/>
 
     <!-- Leanback required fields -->
     <uses-feature
@@ -53,11 +63,6 @@
 
         <!-- allow to use repacked XWalk's apk -->
         <meta-data android:name="xwalk_verify" android:value="disable" />
-
-        <!-- NOTE: DIAL integration for Amazon TV (cause hangs on Fire TV devices???) -->
-        <meta-data
-            android:name="whisperplay"
-            android:resource="@xml/whisperplay"/>
 
         <!-- Root (bootstrap) Activity -->
         <!-- NOTE: avoid setting launchMode or you will get new activity every time from launcher -->
@@ -147,21 +152,6 @@
             android:windowSoftInputMode="adjustResize">
         </activity>
         <!-- End Flavours -->
-
-        <!-- Amazon Launcher for official YouTube -->
-        <activity
-            android:name=".flavors.exoplayer.SmartYouTubeTV4KAmazon"
-            android:allowTaskReparenting="true"
-            android:taskAffinity="com.liskovsoft.smartyoutubetv"
-            android:launchMode="singleTask"
-            android:alwaysRetainTaskState="true"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|fontScale"
-            android:label="@string/title_exo_main"
-            android:windowSoftInputMode="adjustResize"
-            android:exported="true">
-        </activity>
-
-        <activity android:name=".flavors.common.CrashHandlerActivity"/>
 
         <receiver android:name=".receivers.ClearCacheReceiver" android:exported="true">
             <intent-filter>

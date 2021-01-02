@@ -1,14 +1,13 @@
 package com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.trackstate;
 
 import android.content.Context;
-import androidx.annotation.NonNull;
 import android.util.Pair;
+import androidx.annotation.NonNull;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
-import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.helpers.PlayerUtil;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.ExoPreferences;
 
@@ -25,7 +24,7 @@ public class PlayerStateManagerBase {
     private String mDefaultSubtitleLang;
 
     public PlayerStateManagerBase(Context context) {
-        mPrefs = new ExoPreferences(context);
+        mPrefs = ExoPreferences.instance(context);
     }
 
     public MyFormat findProperAudioFormat(TrackGroupArray groupArray) {

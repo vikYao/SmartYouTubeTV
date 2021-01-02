@@ -1,26 +1,32 @@
+apply from: gradle.ext.sharedModulesConstants
 buildscript {
     repositories {
-        maven { url 'https://maven.fabric.io/public' }
+        jcenter()
+        google()
     }
 
     dependencies {
         // These docs use an open ended version so that our plugin
         // can be updated quickly in response to Android tooling updates
 
-        // We recommend changing it to the latest version from our changelog:
-        // https://docs.fabric.io/android/changelog.html#fabric-gradle-plugin
-        classpath 'io.fabric.tools:gradle:1.+'
+        // Check that you have the Google Services Gradle plugin v4.3.2 or later
+        // (if not, add it).
+        classpath 'com.google.gms:google-services:4.3.3'
+
+        // Add the Crashlytics Gradle plugin.
+        // https://firebase.google.com/docs/crashlytics/get-started?platform=android
+        // https://firebase.google.com/docs/android/setup
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.1.1'
     }
 }
 
 apply plugin: 'com.android.application'
 
-// Put Fabric plugin after Android plugin
-apply plugin: 'io.fabric'
-
-repositories {
-    maven { url 'https://maven.fabric.io/public' }
-}
+// // Google Services Gradle plugin (transforms google-services.json file)
+// apply plugin: 'com.google.gms.google-services'
+//
+// // Apply the Crashlytics Gradle plugin
+// apply plugin: 'com.google.firebase.crashlytics'
 
 android {
     // FIX: Default interface methods are only supported starting with Android N (--min-api 24)
@@ -37,11 +43,13 @@ android {
         minSdkVersion project.properties.minSdkVersion
         targetSdkVersion project.properties.targetSdkVersion
         applicationId "com.liskovsoft.videomanager"
-        versionCode 791
-        versionName "6.17.211"
-        multiDexEnabled = true
+        versionCode 1309
+        versionName "6.17.729"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
+
+        // More info: http://myhexaville.com/2017/03/10/android-multidex/
+        multiDexEnabled = true
     }
 
     //signingConfigs {
@@ -83,35 +91,55 @@ android {
         orig {
             matchingFallbacks = ['lite']
         }
-        V720 {
+        beta {
             matchingFallbacks = ['lite']
-            versionCode 9999 // disable auto-update
+            applicationIdSuffix ".beta"
         }
-        V1080 {
-            matchingFallbacks = ['lite']
-            versionCode 9999 // disable auto-update
-        }
-        Vkids {
-            matchingFallbacks = ['lite']
+        kids {
+            matchingFallbacks = ['kids', 'lite']
             applicationIdSuffix ".kids"
         }
         Vlive {
             matchingFallbacks = ['lite']
             applicationIdSuffix ".live"
         }
-        Vadnotam {
-            matchingFallbacks = ['lite']
-            applicationId "com.adnotam.smartyoutubetv"
-        }
+        // Vadnotam {
+        //    matchingFallbacks = ['lite']
+        //    applicationId "com.adnotam.smartyoutubetv"
+        // }
         Vbolshoetv {
-            // vermax uhd250x/300x 1GB ram
-            matchingFallbacks = ['lite']
-            versionCode 9400 + defaultConfig.versionCode
+           // Eltex NV-501
+           // vermax uhd250x/300x 1GB ram
+           matchingFallbacks = ['lite']
+           versionCode 9400 + defaultConfig.versionCode
         }
-        Vfakeyoutube {
+        Vbolshoetv2 {
+            // Eltex NV-501
+            matchingFallbacks = ['full']
+            versionCode 9400 + defaultConfig.versionCode
+            ndk {
+                abiFilters "armeabi-v7a", ""
+            }
+        }
+        // Vrtarmenia {
+        //     matchingFallbacks = ['lite']
+        //     versionCode 9400 + defaultConfig.versionCode
+        //     applicationId "com.rtarmenia.smartyoutubetv"
+        // }
+        Vrtarmenia2 {
             matchingFallbacks = ['lite']
             versionCode 9400 + defaultConfig.versionCode
             applicationId "com.google.android.youtube.tv"
+        }
+        // Vunoiptv {
+        //     matchingFallbacks = ['lite']
+        //     versionCode 9400 + defaultConfig.versionCode
+        //     applicationId "com.unoiptv.smartyoutubetv"
+        // }
+        Vredboxtv {
+            matchingFallbacks = ['lite']
+            versionCode 9400 + defaultConfig.versionCode
+            applicationId "com.redboxtv.smartyoutubetv"
         }
     }
 
@@ -135,26 +163,65 @@ android {
         abortOnError true
         lintConfig rootProject.file('lint.xml')
     }
+
+    // FIX: Product Flavor: Duplicate class found.
+    // Create common folder for duplicate classes.
+    // More info: https://stackoverflow.com/questions/37439120/product-flavor-duplicate-class-found
+    sourceSets {
+        def commonDirs = ['src/commonSrc/appWatcher/java', 'src/commonSrc/crashHandler/java']
+        def bolshoetvCommonDirs = ['src/commonSrc/Vbolshoetv/java']
+        orig {
+            java.srcDirs('src/commonSrc/crashHandler/java')
+        }
+        beta {
+            java.srcDirs('src/commonSrc/crashHandler/java')
+        }
+        kids {
+            java.srcDirs = commonDirs
+        }
+        Vlive {
+            java.srcDirs = commonDirs
+        }
+        // Vrtarmenia {
+        //     java.srcDirs = commonDirs
+        // }
+        Vrtarmenia2 {
+            java.srcDirs = commonDirs
+        }
+        // Vunoiptv {
+        //     java.srcDirs = commonDirs
+        // }
+        Vredboxtv {
+            java.srcDirs = commonDirs
+        }
+        Vbolshoetv {
+            java.srcDirs = bolshoetvCommonDirs
+        }
+        Vbolshoetv2 {
+            java.srcDirs = bolshoetvCommonDirs
+        }
+    }
 }
 
 dependencies {
-    androidTestImplementation(project.properties.espressoCoreVersion, {
+    androidTestImplementation('com.android.support.test.espresso:espresso-core:' + espressoCoreVersion, {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    testImplementation project.properties.junitVersion
-    // example: assertThat(newEmployees).hasSize(6).contains(frodo, sam);
-    testImplementation project.properties.assertJVersion
-    testImplementation project.properties.robolectricVersion
-    testImplementation project.properties.robolectricMultidexVersion
-    testImplementation project.properties.robolectricSupportV4Version
-    testImplementation project.properties.commonsIOVersion
+    testImplementation 'junit:junit:' + junitVersion
+    testImplementation 'org.assertj:assertj-core:' + assertJVersion
+    testImplementation 'org.robolectric:robolectric:' + robolectricVersion
+    testImplementation 'commons-io:commons-io:' + commonsIOVersion
 
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 
     // Common routines
     testImplementation project(path: ':sharedtests')
     implementation project(path: ':sharedutils')
-    implementation project(path: ':leanbackassistant')
+
+    // ATV INSTALL_FAILED_CONFLICTING_PROVIDER fix
+    origImplementation project(path: ':leanbackassistant')
+    betaImplementation project(path: ':leanbackassistant')
+    // experimentsImplementation project(path: ':leanbackassistant')
 
     implementation project(path: ':common')
 
@@ -164,23 +231,27 @@ dependencies {
 
     implementation project(path: ':appupdatechecker')
 
-    implementation(project.properties.crashlyticsVersion) { // see top part of this file
+    // Add the Firebase Crashlytics SDK.
+    betaImplementation('com.google.firebase:firebase-crashlytics:' + firebaseCrashlyticsVersion) {
         transitive = true
     }
-    
-    implementation project.properties.appCompatXVersion
-    implementation project.properties.mediaXVersion // exoplayer fix
-    implementation project.properties.recycleViewXVersion // exoplayer fix
-    implementation project.properties.constraintLayoutXVersion
 
-    implementation project.properties.gsonVersion
-    implementation project.properties.jsonPathVersion
+    implementation 'androidx.appcompat:appcompat:' + appCompatXLibraryVersion
+    implementation 'androidx.media:media:' + appCompatXLibraryVersion // exoplayer fix
+    implementation 'androidx.recyclerview:recyclerview:' + appCompatXLibraryVersion // exoplayer fix
+    implementation 'androidx.constraintlayout:constraintlayout:' + constraintLayoutXVersion
 
-    implementation project.properties.nanoHttpdVersion
-    implementation project.properties.voiceOverlayVersion
+    implementation 'com.google.code.gson:gson:' + gsonVersion
+    implementation 'com.jayway.jsonpath:json-path:' + jsonPathVersion
 
-    implementation project.properties.okhttpVersion
-    implementation project.properties.ottoVersion
+    implementation 'org.nanohttpd:nanohttpd:' + nanoHttpdVersion
+    implementation 'com.algolia.instantsearch:voice:' + voiceOverlayVersion
 
-    implementation project.properties.diskLruCacheVersion
+    implementation 'com.squareup.okhttp3:okhttp:' + okhttpVersion
+    implementation 'com.squareup:otto:' + ottoVersion
+
+    implementation 'com.jakewharton:disklrucache:' + diskLruCacheVersion
+
+    // https://mvnrepository.com/artifact/org.apache.commons
+    implementation 'org.apache.commons:commons-lang3:' + apacheCommonsLangVersion
 }

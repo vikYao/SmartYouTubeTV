@@ -14,6 +14,7 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.R;
+import com.liskovsoft.smartyoutubetv.misc.appstatewatcher.AppStateWatcher;
 import com.liskovsoft.smartyoutubetv.misc.appstatewatcher.AppStateWatcherBase.StateHandler;
 import edu.mit.mobile.android.appupdater.downloadmanager.MyDownloadManagerTask;
 import edu.mit.mobile.android.appupdater.downloadmanager.MyDownloadManagerTask.DownloadListener;
@@ -21,7 +22,9 @@ import edu.mit.mobile.android.appupdater.downloadmanager.MyDownloadManagerTask.D
 abstract class BridgeHandlerBase extends StateHandler implements OnClickListener {
     private static final String TAG = BridgeHandlerBase.class.getSimpleName();
     private final Activity mContext;
+    private final AppStateWatcher mAppStateWatcher;
     private boolean mRemoveOldApkFirst;
+    private boolean mIsFirstRun;
     private DownloadListener listener = new DownloadListener() {
         @Override
         public void onDownloadCompleted(Uri uri) {
@@ -29,17 +32,35 @@ abstract class BridgeHandlerBase extends StateHandler implements OnClickListener
         }
     };
 
-    public BridgeHandlerBase(Activity context) {
+    public BridgeHandlerBase(Activity context, AppStateWatcher appStateWatcher) {
         mContext = context;
+        mAppStateWatcher = appStateWatcher;
+    }
+    
+    @Override
+    public void onFirstRun() {
+        mIsFirstRun = true;
     }
 
     @Override
-    public void onInit() {
+    public void onLoad() {
+        mAppStateWatcher.addRunAfterLock(this::runBridgeInstaller);
+    }
+
+    private void runBridgeInstaller() {
+        if (!checkLauncher()) {
+            return;
+        }
+
         if (CommonApplication.getPreferences().getDisableYouTubeBridge()) {
             return;
         }
 
-        PackageInfo info = getPackageSingnature(getPackageName());
+        if (mIsFirstRun) { // do not scare user when the app just installed
+            return;
+        }
+
+        PackageInfo info = getPackageSignature(getPackageName());
 
         if (info != null) { // bridge installed
             if (Helpers.isUserApp(info) && info.signatures[0].hashCode() != getPackageSignatureHash()) {
@@ -53,14 +74,16 @@ abstract class BridgeHandlerBase extends StateHandler implements OnClickListener
     }
 
     private void askUserPermissionToInstallBridgeApk() {
+        mAppStateWatcher.setLock(true);
         YesNoDialog.create(mContext, R.string.do_install_bridge_apk, this, R.style.AppDialog);
     }
 
     private void askUserPermissionToReinstallBridgeApk() {
+        mAppStateWatcher.setLock(true);
         YesNoDialog.create(mContext, R.string.do_reinstall_bridge_apk, this, R.style.AppDialog);
     }
 
-    private PackageInfo getPackageSingnature(String pkgName) {
+    private PackageInfo getPackageSignature(String pkgName) {
         PackageManager manager = mContext.getPackageManager();
         PackageInfo packageInfo = null;
 
@@ -103,9 +126,11 @@ abstract class BridgeHandlerBase extends StateHandler implements OnClickListener
                 CommonApplication.getPreferences().setDisableYouTubeBridge(true);
                 break;
         }
+        mAppStateWatcher.setLock(false);
     }
 
     protected abstract String getPackageName();
     protected abstract String getPackageUrl();
     protected abstract int getPackageSignatureHash();
+    protected abstract boolean checkLauncher();
 }

@@ -6,6 +6,8 @@ import com.jayway.jsonpath.PathNotFoundException;
 import com.jayway.jsonpath.TypeRef;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.misc.SimpleYouTubeMediaItem;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.mpd.OtfSegmentParser.OtfSegment;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers.YouTubeMediaParser.GenericInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,11 +23,19 @@ public class JsonInfoParser {
     private static final String JSON_INFO_ALL_SUBS = "$.captions.playerCaptionsTracklistRenderer.captionTracks";
     private static final String JSON_INFO_SINGLE_SUB_URL = "$.captions.playerCaptionsTracklistRenderer.captionTracks[0].baseUrl";
     private static final String JSON_INFO_STORY_SPEC = "$.storyboards.playerStoryboardSpecRenderer.spec";
+    private static final String JSON_INFO_VIDEO_LENGTH = "$.videoDetails.lengthSeconds";
     private final DocumentContext mParser;
+    private final JsonVideoMetadataParser mMetadata;
 
-    public JsonInfoParser(String content) {
-        String jsonInfo = ParserUtils.extractParam(content, JSON_INFO);
+    public JsonInfoParser(String video_info_content) {
+        String jsonInfo = ParserUtils.extractParam(JSON_INFO, video_info_content);
         mParser = ParserUtils.createJsonInfoParser(jsonInfo);
+
+        mMetadata = new JsonVideoMetadataParser(mParser);
+    }
+
+    public GenericInfo extractVideoMetadata() {
+        return mMetadata.extractVideoMetadata();
     }
 
     private List<MediaItem> extractMediaItems(String jsonPath) {
@@ -62,26 +72,14 @@ public class JsonInfoParser {
     }
 
     public String extractHlsUrl() {
-        if (mParser == null) {
-            return null;
-        }
-
         return ParserUtils.extractString(JSON_INFO_HLS_URL, mParser);
     }
 
     public String extractTrackingUrl() {
-        if (mParser == null) {
-            return null;
-        }
-
         return ParserUtils.extractString(JSON_INFO_TRACKING_URL, mParser);
     }
 
     public String extractDashUrl() {
-        if (mParser == null) {
-            return null;
-        }
-
         return ParserUtils.extractString(JSON_INFO_DASH_URL, mParser);
     }
 
@@ -94,11 +92,19 @@ public class JsonInfoParser {
     }
 
     public String extractStorySpec() {
+        return ParserUtils.extractString(JSON_INFO_STORY_SPEC, mParser);
+    }
+
+    public List<MediaItem> extractLowQualityFormats() {
         if (mParser == null) {
             return null;
         }
 
-        return ParserUtils.extractString(JSON_INFO_STORY_SPEC, mParser);
+        return extractMediaItems(JSON_INFO_REGULAR_FORMATS);
+    }
+
+    public String extractDurationMs() {
+        return ParserUtils.extractString(JSON_INFO_VIDEO_LENGTH, mParser);
     }
 
     public class Subtitle {
@@ -265,11 +271,8 @@ public class JsonInfoParser {
         // Common
         String getUrl();
         void setUrl(String url);
-        // music videos only
-        String getCipher();
-        void setCipher(String url);
-        String getS();
-        void setS(String s);
+        String getSignatureCipher();
+        void setSignatureCipher(String s);
         String getType();
         void setType(String type);
         String getITag();
@@ -296,6 +299,10 @@ public class JsonInfoParser {
         void setLmt(String lmt);
         String getQualityLabel();
         void setQualityLabel(String qualityLabel);
+        String getFormat();
+        boolean isOTF();
+        String getOtfInitUrl();
+        String getOtfTemplateUrl();
 
         // Other/Regular
         String getQuality();

@@ -9,9 +9,10 @@ import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
-import android.webkit.CookieManager;
 import android.webkit.WebView;
+
 import androidx.fragment.app.FragmentActivity;
+
 import com.liskovsoft.browser.Browser;
 import com.liskovsoft.browser.Controller;
 import com.liskovsoft.browser.Tab;
@@ -21,10 +22,10 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv.events.ControllerEventListener;
 import com.liskovsoft.smartyoutubetv.fragments.FragmentManager;
 import com.liskovsoft.smartyoutubetv.fragments.GenericFragment;
-import com.liskovsoft.smartyoutubetv.keytranslator.BrowserKeyTranslator;
 import com.liskovsoft.smartyoutubetv.keytranslator.KeyTranslator;
-import com.liskovsoft.smartyoutubetv.misc.youtubeintenttranslator.ServiceFinder;
 import com.liskovsoft.smartyoutubetv.misc.UserAgentManager;
+import com.liskovsoft.smartyoutubetv.misc.keyhandler.BrowserKeyTranslator;
+import com.liskovsoft.smartyoutubetv.misc.youtubeintenttranslator.ServiceFinder;
 import com.liskovsoft.smartyoutubetv.misc.youtubeintenttranslator.YouTubeServiceFinder;
 
 public abstract class SmartYouTubeTVBaseFragment extends MainBrowserFragment {
@@ -72,7 +73,7 @@ public abstract class SmartYouTubeTVBaseFragment extends MainBrowserFragment {
     }
 
     private void initKeys() {
-        mTranslator = new BrowserKeyTranslator();
+        mTranslator = BrowserKeyTranslator.create();
     }
 
     private void initYouTubeServices() {
@@ -92,7 +93,7 @@ public abstract class SmartYouTubeTVBaseFragment extends MainBrowserFragment {
         Log.d(TAG, "creating controller: " + "icicle=" + icicle + ", intent=" + origin);
 
         mController = new SimpleUIController(this);
-        mController.setListener(new ControllerEventListener(getActivity(), mController));
+        mController.setListener(new ControllerEventListener(getActivity()));
         mController.setDefaultUrl(Uri.parse(mServiceFinder.getUrl()));
         mController.setDefaultHeaders(mUAManager.getUAHeaders());
 

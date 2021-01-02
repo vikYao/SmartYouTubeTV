@@ -1,3 +1,9 @@
+google-services.json
+/smartyoutubetv/*/experiments
+/smartyoutubetv/src/commonSrc/V*
+/smartyoutubetv/src/V*
+*.hprof
+/smartyoutubetv/release
 log.txt
 /android.keystore
 /android-upd2.keystore
@@ -25,6 +31,7 @@ tmp/
 /.idea/libraries
 .DS_Store
 /build
+build
 /captures
 .externalNativeBuild
 fabric.properties

@@ -5,4 +5,6 @@ import com.liskovsoft.smartyoutubetv.fragments.GenericFragment;
 
 public interface PlayerFragment extends GenericFragment {
     void openVideo(Intent videoIntent);
+    void close();
+    boolean isStopped();
 }

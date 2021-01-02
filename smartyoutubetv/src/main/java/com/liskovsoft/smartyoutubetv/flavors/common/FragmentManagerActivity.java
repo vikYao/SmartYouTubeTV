@@ -1,7 +1,6 @@
 package com.liskovsoft.smartyoutubetv.flavors.common;
 
 import android.app.ActivityManager.MemoryInfo;
-import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -12,9 +11,9 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
+import com.liskovsoft.sharedutils.helpers.AppInfoHelpers;
 import com.liskovsoft.sharedutils.helpers.Helpers;
-import com.liskovsoft.sharedutils.helpers.PermissionManager;
+import com.liskovsoft.sharedutils.helpers.PermissionHelpers;
 import com.liskovsoft.sharedutils.locale.LangHelper;
 import com.liskovsoft.sharedutils.locale.LocaleContextWrapper;
 import com.liskovsoft.sharedutils.mylogger.Log;
@@ -25,18 +24,19 @@ import com.liskovsoft.smartyoutubetv.fragments.BrowserFragment;
 import com.liskovsoft.smartyoutubetv.fragments.FragmentManager;
 import com.liskovsoft.smartyoutubetv.fragments.GenericFragment;
 import com.liskovsoft.smartyoutubetv.fragments.LoadingManager;
-import com.liskovsoft.smartyoutubetv.misc.GlobalKeyHandler;
 import com.liskovsoft.smartyoutubetv.misc.LangUpdater;
-import com.liskovsoft.smartyoutubetv.misc.MainApkUpdater;
 import com.liskovsoft.smartyoutubetv.misc.SmartUtils;
 import com.liskovsoft.smartyoutubetv.misc.appstatewatcher.AppStateWatcher;
 import com.liskovsoft.smartyoutubetv.misc.appstatewatcher.AppStateWatcherBase;
+import com.liskovsoft.smartyoutubetv.misc.keyhandler.GlobalKeyHandler;
+import com.liskovsoft.smartyoutubetv.prefs.SmartPreferences;
 import com.liskovsoft.smartyoutubetv.voicesearch.VoiceSearchBridge;
+import com.liskovsoft.smartyoutubetv.voicesearch.VoiceSearchBridge.SearchListener;
 import com.liskovsoft.smartyoutubetv.voicesearch.VoiceSearchBusBridge;
 
 import java.util.HashMap;
 
-public abstract class FragmentManagerActivity extends AppCompatActivity implements FragmentManager {
+public abstract class FragmentManagerActivity extends CrashHandlerActivity implements FragmentManager, SearchListener {
     private static final String TAG = FragmentManagerActivity.class.getSimpleName();
     private KeyEvent mEvent;
     private GenericFragment mActiveFragment;
@@ -44,7 +44,6 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
     private VoiceSearchBridge mVoiceBridge;
     protected LoadingManager mLoadingManager;
     private boolean mLoadingDone;
-    private MainApkUpdater mApkUpdater;
     private int mRequestCode = 50;
     private HashMap<Integer, ActivityResult> mResultMap;
     private boolean mDisableKeyEvents;
@@ -52,12 +51,10 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
     private AppStateWatcherBase mAppStateWatcher;
     private Uri mUrlData;
 
-    //public FragmentManagerActivity() {
-    //    new GlobalExceptionHandler(this).onInit();
-    //}
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setupLog();
+
         mAppStateWatcher = new AppStateWatcher(this);
         mAppStateWatcher.run();
 
@@ -72,8 +69,6 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
 
         super.onCreate(savedInstanceState);
 
-        initPermissions();
-
         setupFontSize();
 
         setupVoiceSearch();
@@ -83,17 +78,17 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
         hideTitleBar();
 
         mLoadingManager = new TipsLoadingManager(this);
-        mApkUpdater = new MainApkUpdater(this);
         mResultMap = new HashMap<>();
         mKeyHandler = new GlobalKeyHandler(this);
 
         mUrlData = getIntent().getData();
 
-        mApkUpdater.start();
-
         // for search on app boot see onAppLoaded method
 
-        Log.d(TAG, "onCreate intent: " + getIntent());
+        Log.d(TAG, "onCreate intent: " + getIntent().toUri(0)); // print all extras
+
+        Log.d(TAG, "Enabling screensaver...");
+        Helpers.enableScreensaver(this);
     }
 
     @Override
@@ -199,6 +194,8 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
     public void finish() {
         mActiveFragment.finish();
         super.finish();
+
+        CommonApplication.getPreferences().sync();
         System.exit(0);
     }
 
@@ -212,23 +209,45 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
     public boolean dispatchKeyEvent(KeyEvent event) {
         CommonApplication.getPreferences().setLastUserInteraction(System.currentTimeMillis());
 
-        mKeyHandler.checkLongPressExit(event);
+        mKeyHandler.checkShortcut(event);
 
         if (mDisableKeyEvents || mActiveFragment == null) { // 'll be enabled again after fragment switching
+            Log.d(TAG, "Key events are disabled...");
+            return true;
+        }
+
+        event = mKeyHandler.translateKey(event);
+
+        if (event == null) { // event is ignored
+            return false;
+        }
+
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && !mLoadingDone) {
+            Log.d(TAG, "Back pressed. Exiting from the app...");
+            mAppStateWatcher.onExit();
+            SmartUtils.returnToLaunchersDialogOrExit(this);
             return true;
         }
 
         Log.d(TAG, "Dispatching event: " + event + ", on fragment: " + mActiveFragment.getClass().getSimpleName());
 
-        event = mKeyHandler.translateKey(event);
+        mEvent = event; // give a ability to modify this event in the middle of the pipeline
+        return mVoiceBridge.onKeyEvent(mEvent) || mActiveFragment.dispatchKeyEvent(mEvent) || superDispatchKeyEventWrapper();
+    }
 
-        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && !mLoadingDone) {
-            SmartUtils.returnToLaunchersDialog(this);
-            return true;
+    /**
+     * FIX: NPE in com.android.org.chromium.content.browser.ContentViewCore.dispatchKeyEvent (ContentViewCore.java:1883)
+     */
+    private boolean superDispatchKeyEventWrapper() {
+        boolean result = false;
+
+        try {
+            result = super.dispatchKeyEvent(mEvent);
+        } catch (NullPointerException e) {
+            e.printStackTrace();
         }
 
-        mEvent = event; // give a choice to modify this event in the middle of the pipeline
-        return mVoiceBridge.onKeyEvent(mEvent) || mActiveFragment.dispatchKeyEvent(mEvent) || super.dispatchKeyEvent(mEvent);
+        return result;
     }
 
     @Override
@@ -290,7 +309,7 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (requestCode == PermissionManager.REQUEST_EXTERNAL_STORAGE) {
+        if (requestCode == PermissionHelpers.REQUEST_EXTERNAL_STORAGE) {
             // Check if the only required permission has been granted
             if (grantResults.length >= 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Camera permission has been granted, preview can be displayed
@@ -301,25 +320,19 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
-    }
 
-    private void initPermissions() {
-        boolean alreadyGranted = SmartUtils.isBolshoeTV();
-
-        // avoid error on genymotion emulator (NoSuchField error)
-        if (Helpers.isGenymotion() || alreadyGranted) {
-            return;
-        }
-
-        PermissionManager.verifyStoragePermissions(this);
+        mAppStateWatcher.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
 
-        // int a = 1/0;
+        Log.d(TAG, "Disabling screensaver...");
+        Helpers.disableScreensaver(this);
 
+        mAppStateWatcher.onPause();
+        CommonApplication.getPreferences().sync();
         Log.flush();
     }
 
@@ -327,8 +340,12 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
     protected void onResume() {
         super.onResume();
 
+        mAppStateWatcher.onResume();
         Helpers.makeActivityFullscreen(this);
         Helpers.makeActivityHorizontal(this);
+
+        Log.d(TAG, "Enabling screensaver...");
+        Helpers.enableScreensaver(this);
     }
 
     @Override
@@ -338,9 +355,7 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
         mLoadingManager.hide();
         mAppStateWatcher.onLoad();
 
-        if (mVoiceBridge.openSearchPage(mUrlData)) {
-            onSearchQuery();
-        }
+        mVoiceBridge.openSearchPage(mUrlData);
 
         mActiveFragment.onLoad();
     }
@@ -353,11 +368,13 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
 
         mUrlData = intent.getData();
 
-        if (mVoiceBridge.openSearchPage(intent.getData())) {
-            onSearchQuery();
-        }
+        mVoiceBridge.openSearchPage(intent.getData());
 
         mAppStateWatcher.onNewIntent(intent);
+    }
+
+    protected void displaySpeechRecognizers() {
+        mVoiceBridge.displaySpeechRecognizers();
     }
 
     @Override
@@ -394,7 +411,8 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
         mActiveFragment.showSoftKeyboard();
     }
 
-    protected void onSearchQuery() {}
+    @Override
+    public void onSearchQueryReceived() {}
 
     private void checkMemory() {
         MemoryInfo memory = Helpers.getAvailableMemory(this);
@@ -425,4 +443,32 @@ public abstract class FragmentManagerActivity extends AppCompatActivity implemen
     }
 
     protected void onMemoryCritical() {}
+
+    private void setupLog() {
+        // used mainly on custom builds (no bootstrap activity)
+        SmartPreferences prefs = CommonApplication.getPreferences();
+        Log.init(this, prefs.getLogType(), AppInfoHelpers.getActivityLabel(this, prefs.getBootActivityName()));
+    }
+
+    @Override
+    public void handleIntent(Intent intent) {
+        onNewIntent(intent);
+    }
+
+    public boolean isSimplePlayerMode() {
+        return false;
+    }
+
+    protected void onPlaybackStarted() {
+        mAppStateWatcher.onPlaybackStarted();
+    }
+
+    protected void onPlaybackStopped() {
+        mAppStateWatcher.onPlaybackStopped();
+    }
+
+    @Override
+    public GlobalKeyHandler getKeyHandler() {
+        return mKeyHandler;
+    }
 }

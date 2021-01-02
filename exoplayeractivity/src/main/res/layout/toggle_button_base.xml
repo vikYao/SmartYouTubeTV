@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:minWidth="80dp"
+              android:minWidth="0dp"
               android:layout_width="wrap_content"
               android:layout_height="@dimen/toggle_button_wrapper_height"
               android:gravity="center_horizontal"
@@ -16,7 +16,7 @@
         android:clickable="false"
         android:padding="@dimen/toggle_button_padding"
         android:scaleType="fitCenter"
-        android:src="@mipmap/btn_placeholder"
+        android:src="@drawable/btn_placeholder"
         android:background="@color/transparent"
         android:layout_width="@dimen/toggle_button_width"
         android:layout_height="@dimen/toggle_button_height"
@@ -38,7 +38,7 @@
     <!-- End ImageToggleButton -->
 
     <Button
-        android:padding="5dp"
+        android:padding="@dimen/toggle_button_padding2"
         android:maxLines="1"
         android:clickable="false"
         android:textSize="@dimen/toggle_button_text_size"

@@ -6,37 +6,63 @@ import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.liskovsoft.exoplayeractivity.R;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
-import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.autoframerate.DisplayHolder.Mode;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.autoframerate.DisplaySyncHelper.AutoFrameRateListener;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.ExoPreferences;
+
+import java.util.HashMap;
 
 class AutoFrameRateHelper {
     private static final String TAG = AutoFrameRateHelper.class.getSimpleName();
     private final Activity mContext;
-    protected DisplaySyncHelper mSyncHelper;
+    private DisplaySyncHelper mSyncHelper;
     private final ExoPreferences mPrefs;
     private SimpleExoPlayer mPlayer;
+    private static final long THROTTLE_INTERVAL_MS = 5_000;
+    private long mPrevCall;
+    private HashMap<Float, Float> mFrameRateMapping;
 
     public AutoFrameRateHelper(Activity context, DisplaySyncHelper syncHelper) {
         mContext = context;
         mSyncHelper = syncHelper;
         mPrefs = ExoPreferences.instance(mContext);
+
+        mSyncHelper.setResolutionSwitchEnabled(mPrefs.isAfrResolutionSwitchEnabled());
+
+        initFrameRateMapping();
+    }
+
+    private void initFrameRateMapping() {
+        mFrameRateMapping = new HashMap<>();
+        mFrameRateMapping.put(30f, 29.97f);
+        mFrameRateMapping.put(60f, 59.94f);
     }
 
     public void apply() {
         if (!getEnabled()) {
-            Log.d(TAG, "apply: autoframerate not enabled... exiting...");
+            Log.d(TAG, "Autoframerate not enabled... exiting...");
             return;
         }
 
-        if (mPlayer == null || mPlayer.getVideoFormat() == null) {
-            Log.e(TAG, "Can't apply mode change: player or format is null");
+        if (mPlayer == null) {
+            Log.e(TAG, "Can't apply mode change: player is null");
             return;
         }
 
+        if (mPlayer.getVideoFormat() == null) {
+            Log.e(TAG, "Can't apply mode change: format is null");
+            return;
+        }
+
+        if (System.currentTimeMillis() - mPrevCall < THROTTLE_INTERVAL_MS) {
+            Log.e(TAG, "Throttling afr calls...");
+            return;
+        } else {
+            mPrevCall = System.currentTimeMillis();
+        }
 
         Format videoFormat = mPlayer.getVideoFormat();
-        float frameRate = videoFormat.frameRate;
+        float frameRate = correctFps(videoFormat.frameRate);
+
         int width = videoFormat.width;
         Log.d(TAG, String.format("Applying mode change... Video fps: %s, width: %s", frameRate, width));
         mSyncHelper.syncDisplayMode(mContext.getWindow(), width, frameRate);
@@ -56,16 +82,37 @@ class AutoFrameRateHelper {
         apply();
     }
 
-    public boolean getDelayEnabled() {
-        return getEnabled() && mPrefs.isAfrDelayEnabled();
+    public boolean isDelayEnabled() {
+        return mPrefs.isAfrDelayEnabled();
     }
 
     public void setDelayEnabled(boolean enabled) {
-        if (getEnabled()) {
-            mPrefs.setAfrDelayEnabled(enabled);
-        } else {
-            MessageHelpers.showMessage(mContext, R.string.autoframerate_not_supported);
+        mPrefs.setAfrDelayEnabled(enabled);
+    }
+
+    public boolean isResolutionSwitchEnabled() {
+        return mPrefs.isAfrResolutionSwitchEnabled();
+    }
+
+    public void setResolutionSwitchEnabled(boolean enabled) {
+        mPrefs.setAfrResolutionSwitchEnabled(enabled);
+        mSyncHelper.setResolutionSwitchEnabled(enabled);
+    }
+
+    public long getDelayTime() {
+        return mPrefs.getAfrDelayTime();
+    }
+
+    public void setDelayTime(long pauseMS) {
+        mPrefs.setAfrDelayTime(pauseMS);
+    }
+
+    public void applyModeChangeFix() {
+        if (!getEnabled()) {
+            return;
         }
+
+        mSyncHelper.applyModeChangeFix(mContext.getWindow());
     }
 
     public void saveOriginalState() {
@@ -87,25 +134,6 @@ class AutoFrameRateHelper {
         mSyncHelper.restoreOriginalState(mContext.getWindow());
     }
 
-    public void saveCurrentState() {
-        if (!getEnabled()) {
-            return;
-        }
-
-        mSyncHelper.saveCurrentState();
-    }
-
-    public void restoreCurrentState() {
-        if (!getEnabled()) {
-            Log.d(TAG, "restoreCurrentState: autoframerate not enabled... exiting...");
-            return;
-        }
-
-        Log.d(TAG, "Restoring current mode...");
-
-        mSyncHelper.restoreCurrentState(mContext.getWindow());
-    }
-    
     public void setPlayer(SimpleExoPlayer player) {
         mPlayer = player;
     }
@@ -116,5 +144,21 @@ class AutoFrameRateHelper {
 
     public void resetStats() {
         mSyncHelper.resetStats();
+    }
+
+    private float correctFps(float frameRate) {
+        if (mPrefs.isAfr60fpsCorrectionEnabled() && mFrameRateMapping.containsKey(frameRate)) {
+            return mFrameRateMapping.get(frameRate);
+        }
+
+        return frameRate;
+    }
+
+    public boolean is60fpsCorrectionEnabled() {
+        return mPrefs.isAfr60fpsCorrectionEnabled();
+    }
+
+    public void set60fpsCorrectionEnabled(boolean checked) {
+        mPrefs.setAfr60fpsCorrectionEnabled(checked);
     }
 }

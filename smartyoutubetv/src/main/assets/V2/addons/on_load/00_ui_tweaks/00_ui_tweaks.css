@@ -1,0 +1,29 @@
+/* Font fix on the welcome screen */
+.who-fullscreen-zero .overlay-partials-header .title,
+.who-fullscreen-zero .overlay-partials-header .subtitle {
+    font-size: 2rem !important;
+}
+
+/* Hide Viewport from debug info. */
+/* Since it shows unreal values on tv boxes: pixel density problem. */
+/*.html5-video-info-panel-content > :nth-child(2) {*/
+/*    display: none !important;*/
+/*}*/
+
+/* 1) Hide payed promotions msg */
+/* 2) Hide all navigation icons from the bottom-right corner except back */
+#video-message-overlay,
+div#legend > div.legend-item:not(.airstream-back) {
+    display: none !important;
+}
+
+/* Search page input hint color */
+#text-input input::placeholder {
+    color: gray;
+}
+
+
+/* Increase readability of the stream schedule message */
+.player-supplements > .fresca-slate > .fresca-info {
+    background-color: black !important;
+}

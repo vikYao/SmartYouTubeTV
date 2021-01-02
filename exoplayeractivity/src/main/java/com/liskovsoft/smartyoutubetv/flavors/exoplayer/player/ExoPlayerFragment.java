@@ -29,7 +29,6 @@ public class ExoPlayerFragment extends ExoPlayerBaseFragment {
     private View mWrapper;
     private boolean mIsAttached;
     private Intent mPendingIntent;
-    private KeyHandler mKeyHandler;
 
     public ExoPlayerFragment() {
         mListener = new AutoFrameRateManagerAlt(this);
@@ -44,10 +43,6 @@ public class ExoPlayerFragment extends ExoPlayerBaseFragment {
     // NOTE: entry point to handle keys
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (mKeyHandler == null) {
-            mKeyHandler = KeyHandlerFactory.create(getActivity(), this);
-        }
-
         return mKeyHandler.handle(event);
     }
 
@@ -167,10 +162,19 @@ public class ExoPlayerFragment extends ExoPlayerBaseFragment {
 
         if (intent != null) {
             openVideoFromIntent(intent);
-        } else {
-            // loop video while user page or suggestions displayed
-            mButtonsManager.syncRepeatButton();
         }
+
+        syncButtonStates(intent != null);
+    }
+
+    @Override
+    public void close() {
+         onPlayerAction(ExoPlayerFragment.BUTTON_BACK);
+    }
+
+    @Override
+    public boolean isStopped() {
+        return isPlaybackStopped();
     }
 
     @Override
@@ -221,9 +225,8 @@ public class ExoPlayerFragment extends ExoPlayerBaseFragment {
             openVideoFromIntent(mPendingIntent);
             mPendingIntent = null;
         } else if (getIntent() != null) {
-            syncButtonStates(); // onCheckedChanged depends on this
+            syncButtonStates(true); // onCheckedChanged depends on this
             initializePlayer();
-            //initializeUiScale();
         }
     }
 
@@ -259,20 +262,6 @@ public class ExoPlayerFragment extends ExoPlayerBaseFragment {
                 afrView.setVisibility(View.GONE);
                 afrView.setText("");
             }, hideDelay);
-        }
-    }
-
-    public void startPlaybackDelay(long delay) {
-        SimpleExoPlayer player = getPlayer();
-        FragmentActivity activity = getActivity();
-        PlayerView playerView = getExoPlayerView();
-
-        if (player != null && activity != null) {
-            player.setPlayWhenReady(false);
-
-            new Handler(activity.getMainLooper()).postDelayed(() -> {
-                player.setPlayWhenReady(true);
-            }, delay);
         }
     }
 }

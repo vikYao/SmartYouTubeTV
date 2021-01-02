@@ -2,36 +2,46 @@ package com.liskovsoft.smartyoutubetv.interceptors.scripts;
 
 import android.content.Context;
 import android.webkit.WebResourceResponse;
+
+import androidx.annotation.Nullable;
+
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv.interceptors.RequestInterceptor;
-import com.liskovsoft.smartyoutubetv.webscripts.MainCachedScriptManager;
+import com.liskovsoft.smartyoutubetv.interceptors.ads.contentfilter.ContentFilter;
+import com.liskovsoft.smartyoutubetv.webscripts.CachedMainScriptManager;
 import com.liskovsoft.smartyoutubetv.webscripts.ScriptManager;
-import okhttp3.Response;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.InputStream;
 
+import okhttp3.MediaType;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+
 public abstract class ScriptManagerInterceptor extends RequestInterceptor {
     private static final String TAG = ScriptManagerInterceptor.class.getSimpleName();
-    private final Context mContext;
     private final ScriptManager mManager;
+    private final ContentFilter mFilter;
     private boolean mFirstScriptDone;
 
     public ScriptManagerInterceptor(Context context) {
         super(context);
-        
-        mContext = context;
-        mManager = new MainCachedScriptManager(context);
+
+        mManager = new CachedMainScriptManager(context);
+        mFilter = new ContentFilter(context);
     }
 
     @Override
     public boolean test(String url) {
-        if (isFirstScript(url)) {
+        if (isBaseScript(url)) {
             return true;
         }
 
-        if (isLastScript(url)) {
+        if (isMainScript(url)) {
+            return true;
+        }
+
+        if (isPlayerScript(url)) {
             return true;
         }
 
@@ -44,28 +54,39 @@ public abstract class ScriptManagerInterceptor extends RequestInterceptor {
 
     @Override
     public WebResourceResponse intercept(String url) {
-        Response response = getResponse(url);
+        InputStream result = getContent(url);
 
-        InputStream result = response.body().byteStream();
-
-        if (isFirstScript(url)) {
-            result = applyInit(result);
-            mFirstScriptDone = true;
+        if (result == null) {
+            return null;
         }
 
-        if (isLastScript(url)) {
+        MediaType type;
+
+        if (isBaseScript(url)) {
+            result = applyInit(result);
+            mFirstScriptDone = true;
+            result = mFilter.filterFirstScript(result);
+            type = MediaType.parse("text/javascript");
+        } else if (isMainScript(url)) {
+            result = mFilter.filterSecondScript(result);
+            type = MediaType.parse("text/javascript");
+        } else if (isPlayerScript(url)) {
             if (!mFirstScriptDone) {
                 result = applyInit(result);
             }
 
             result = applyLoad(result);
-        }
-
-        if (isStyle(url)) {
+            result = mFilter.filterLastScript(result);
+            type = MediaType.parse("text/javascript");
+        } else if (isStyle(url)) {
             result = applyStyles(result);
+            result = mFilter.filterStyles(result);
+            type = MediaType.parse("text/css");
+        } else {
+            return null;
         }
 
-        return createResponse(response.body().contentType(), result);
+        return createResponse(type, result);
     }
 
     @Nullable
@@ -95,9 +116,24 @@ public abstract class ScriptManagerInterceptor extends RequestInterceptor {
         return result;
     }
 
-    protected abstract boolean isFirstScript(String url);
+    protected InputStream getContent(String url) {
+        Response response = getResponse(url);
 
-    protected abstract boolean isLastScript(String url);
+        if (response == null || response.body() == null) {
+            Log.e(TAG, "Can't inject custom scripts into " + url + ". Response is empty: " + response);
+            return null;
+        }
+
+        ResponseBody body = response.body();
+
+        return body.byteStream();
+    }
+
+    protected abstract boolean isBaseScript(String url);
+
+    protected abstract boolean isMainScript(String url);
+
+    protected abstract boolean isPlayerScript(String url);
 
     protected abstract boolean isStyle(String url);
 }

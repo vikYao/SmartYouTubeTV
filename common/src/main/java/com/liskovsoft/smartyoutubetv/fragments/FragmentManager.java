@@ -2,6 +2,7 @@ package com.liskovsoft.smartyoutubetv.fragments;
 
 import android.content.Intent;
 import android.view.KeyEvent;
+import com.liskovsoft.smartyoutubetv.misc.keyhandler.GlobalKeyHandler;
 
 public interface FragmentManager {
     void setDispatchEvent(KeyEvent event);
@@ -12,4 +13,6 @@ public interface FragmentManager {
     void startActivityForResult(Intent intent, ActivityResult callback);
     void disableKeyEvents();
     void onSearchFieldFocused();
+    void handleIntent(Intent intent);
+    GlobalKeyHandler getKeyHandler();
 }

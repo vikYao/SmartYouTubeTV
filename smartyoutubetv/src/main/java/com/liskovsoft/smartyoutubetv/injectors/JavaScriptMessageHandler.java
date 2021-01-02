@@ -18,14 +18,24 @@ public class JavaScriptMessageHandler {
     private final static String MESSAGE_AUTHORIZATION_HEADER = "message_authorization_header";
     private final static String MESSAGE_ENABLE_SCREENSAVER = "message_enable_screensaver";
     private final static String MESSAGE_DISABLE_SCREENSAVER = "message_disable_screensaver";
+    private final static String MESSAGE_VIDEO_OPENED = "message_video_opened";
     private final static String MESSAGE_VIDEO_POSITION = "message_video_position";
+    private final static String MESSAGE_VIDEO_TYPE = "message_video_type";
+    private final static String MESSAGE_VIDEO_PAUSED = "message_video_paused";
     private final static String MESSAGE_DOUBLE_BACK_EXIT = "message_double_back_exit";
     private final static String MESSAGE_SEARCH_FIELD_FOCUSED = "message_search_field_focused";
     private final static String MESSAGE_AUTH_BODY = "message_auth_body";
+    private final static String MESSAGE_POST_DATA = "message_post_data";
+    private final static String MESSAGE_HIGH_CONTRAST_ENABLED = "message_high_contrast_enabled";
+    private final static String MESSAGE_VIDEO_OPEN_TIME = "message_video_open_time";
+    private final static String MESSAGE_VISITOR_ID_HEADER = "message_visitor_id_header";
+    private final static String MESSAGE_CLIENT_DATA_HEADER = "message_client_data_header";
     private final Context mContext;
+    private final SmartPreferences mPrefs;
 
     public JavaScriptMessageHandler(Context context) {
         mContext = context;
+        mPrefs = CommonApplication.getPreferences();
     }
 
     public void handleMessage(String message, String content) {
@@ -42,8 +52,13 @@ public class JavaScriptMessageHandler {
                 updater.update();
                 break;
             case MESSAGE_AUTHORIZATION_HEADER:
-                SmartPreferences prefs = SmartPreferences.instance(mContext);
-                prefs.setAuthorizationHeader(content);
+                mPrefs.setAuthorizationHeader(content);
+                break;
+            case MESSAGE_VISITOR_ID_HEADER:
+                mPrefs.setVisitorIdHeader(content);
+                break;
+            case MESSAGE_CLIENT_DATA_HEADER:
+                mPrefs.setClientDataHeader(content);
                 break;
             case MESSAGE_ENABLE_SCREENSAVER:
                 Helpers.enableScreensaver((Activity) mContext);
@@ -51,8 +66,17 @@ public class JavaScriptMessageHandler {
             case MESSAGE_DISABLE_SCREENSAVER:
                 Helpers.disableScreensaver((Activity) mContext);
                 break;
+            case MESSAGE_VIDEO_OPENED:
+                mPrefs.setNewVideoSrc(content);
+                break;
             case MESSAGE_VIDEO_POSITION:
-                CommonApplication.getPreferences().setCurrentVideoPosition(Integer.parseInt(content));
+                mPrefs.setCurrentVideoPosition(Integer.parseInt(content));
+                break;
+            case MESSAGE_VIDEO_TYPE:
+                mPrefs.setCurrentVideoType(content);
+                break;
+            case MESSAGE_VIDEO_PAUSED:
+                mPrefs.setHtmlVideoPaused(Boolean.parseBoolean(content));
                 break;
             case MESSAGE_DOUBLE_BACK_EXIT:
                 ((FragmentManager) mContext).onExitDialogShown();
@@ -62,6 +86,15 @@ public class JavaScriptMessageHandler {
                 break;
             case MESSAGE_AUTH_BODY:
                 GlobalPreferences.instance(mContext).setRawAuthData(content);
+                break;
+            case MESSAGE_POST_DATA:
+                mPrefs.setPostData(content);
+                break;
+            case MESSAGE_HIGH_CONTRAST_ENABLED:
+                mPrefs.setHighContrastEnabled(Boolean.parseBoolean(content));
+                break;
+            case MESSAGE_VIDEO_OPEN_TIME:
+                mPrefs.setVideoOpenTime((long) Float.parseFloat(content));
                 break;
         }
     }

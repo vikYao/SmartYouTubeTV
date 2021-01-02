@@ -1,22 +1,31 @@
 package com.liskovsoft.smartyoutubetv.interceptors.scripts;
 
 import android.content.Context;
+
 import com.liskovsoft.sharedutils.helpers.Helpers;
 
+import java.util.regex.Pattern;
+
 /**
- *  Legacy devices
+ * Legacy devices
  */
 public class LegacyMainScriptManagerInterceptor extends MainScriptManagerInterceptor {
-    private static final String[] FIRST_SCRIPT_REGEX = {"youtube.com/s/_/kabuki_legacy/_/js/.*/m=base$"};
-    private static final String[] MAIN_STYLE_REGEX = {"youtube.com/s/_/kabuki_legacy/_/ss/.*"};
+    private static final Pattern[] BASE_SCRIPT_REGEX = {Pattern.compile("youtube.com/s/_/kabuki_legacy/_/js/.*/m=base$")};
+    private static final Pattern[] MAIN_SCRIPT_REGEX = {Pattern.compile("youtube.com/s/_/kabuki_legacy/_/js/.*/m=main$")};
+    private static final Pattern[] MAIN_STYLE_REGEX = {Pattern.compile("youtube.com/s/_/kabuki_legacy/_/ss/.*")};
 
     public LegacyMainScriptManagerInterceptor(Context context) {
         super(context);
     }
 
     @Override
-    protected boolean isFirstScript(String url) {
-        return super.isFirstScript(url) || Helpers.matchAll(url, FIRST_SCRIPT_REGEX);
+    protected boolean isBaseScript(String url) {
+        return super.isBaseScript(url) || Helpers.matchAll(url, BASE_SCRIPT_REGEX);
+    }
+
+    @Override
+    protected boolean isMainScript(String url) {
+        return super.isMainScript(url) || Helpers.matchAll(url, MAIN_SCRIPT_REGEX);
     }
 
     @Override

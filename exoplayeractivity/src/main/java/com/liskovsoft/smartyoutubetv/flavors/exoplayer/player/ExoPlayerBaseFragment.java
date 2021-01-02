@@ -6,29 +6,37 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
 import com.google.android.exoplayer2.trackselection.TrackSelection;
+import com.google.android.exoplayer2.util.Util;
 import com.liskovsoft.exoplayeractivity.BuildConfig;
 import com.liskovsoft.exoplayeractivity.R;
 import com.liskovsoft.sharedutils.dialogs.CombinedChoiceSelectorDialog;
 import com.liskovsoft.sharedutils.dialogs.SingleChoiceSelectorDialog;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.dialogs.afr.AfrDialogSource;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.dialogs.restrictcodec.RestrictFormatDialogSource;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.dialogs.speed.SpeedDialogSource;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.dialogs.zoom.VideoZoomDialogSource;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.helpers.ExoIntent;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.ExoPreferences;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.MyDebugViewHelper;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.MyDefaultTrackSelector;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.PlayerButtonsManager;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.PlayerInitializer;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.VideoZoomManager;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.keyhandler.KeyHandler;
+import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.keyhandler.KeyHandlerFactory;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support.trackstate.PlayerStateManager;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.widgets.LayoutToggleButton;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.widgets.TextToggleButton;
@@ -58,6 +66,7 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
     public static final String BUTTON_PREV = "button_prev";
     public static final String BUTTON_NEXT = "button_next";
     public static final String BUTTON_BACK = "button_back";
+    public static final String BUTTON_SEARCH = "button_search";
     public static final String BUTTON_SUGGESTIONS = "button_suggestions";
     public static final String VIDEO_DATE = "video_date";
     public static final String VIDEO_TITLE = "video_title";
@@ -70,16 +79,21 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
     public static final String STORYBOARD_SPEC = "storyboard_spec";
     public static final String VIDEO_LENGTH = "video_length";
     public static final String VIDEO_POSITION = "video_position";
+    public static final String PERCENT_WATCHED = "percent_watched";
+    public static final String VIDEO_STARTED = "video_started";
 
     private int mInterfaceVisibilityState = View.INVISIBLE;
     private boolean mIsDurationSet;
 
     protected PlayerButtonsManager mButtonsManager;
+    protected KeyHandler mKeyHandler;
     private PlayerInitializer mPlayerInitializer;
     private MyDebugViewHelper mDebugViewHelper;
     private PlayerStateManager mStateManager;
     private VideoZoomManager mVideoZoomManager;
     private List<PlayerEventListener> mListeners;
+    private boolean mIsAfrApplying;
+    private boolean mPlaybackStopped;
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -90,6 +104,7 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         mButtonsManager = new PlayerButtonsManager(this);
         mPlayerInitializer = new PlayerInitializer(this);
         mVideoZoomManager = new VideoZoomManager(getActivity(), mSimpleExoPlayerView);
+        mKeyHandler = KeyHandlerFactory.create(getActivity(), this);
 
         for (PlayerEventListener listener : mListeners) {
             listener.onAppInit();
@@ -98,6 +113,8 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
 
     @Override
     public void initializePlayer() {
+        mKeyHandler.setDisableEvents(false);
+
         if (getIntent() == null || getActivity() == null) {
             return;
         }
@@ -120,7 +137,7 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
             initTimelinePreviews();
         }
 
-        restoreSpeed();
+        SpeedDialogSource.restoreSpeed(getActivity(), mPlayer);
     }
 
     private void initTimelinePreviews() {
@@ -136,13 +153,17 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         );
     }
 
+    /**
+     * NOTE: Track selection based on track bitrate
+     */
     protected void initializeTrackSelector() {
         TrackSelection.Factory trackSelectionFactory =
                 new AdaptiveTrackSelection.Factory();
 
         mTrackSelector = new MyDefaultTrackSelector(trackSelectionFactory, getActivity());
 
-        mTrackSelector.setParameters(mTrackSelector.buildUponParameters().setForceHighestSupportedBitrate(true));
+        mTrackSelector.setParameters(mTrackSelector.buildUponParameters()
+                .setForceHighestSupportedBitrate(true));
 
         // Commented out because of bug: can't instantiate OMX decoder...
         // NOTE: 'Tunneled video playback' (HDR and others) (https://medium.com/google-exoplayer/tunneled-video-playback-in-exoplayer-84f084a8094d)
@@ -152,7 +173,7 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         //}
 
         mTrackSelectionHelper = new TrackSelectionHelper(mTrackSelector, trackSelectionFactory);
-        mEventLogger = new EventLogger(mTrackSelector);
+        mEventLogger = new MyEventLogger(mTrackSelector);
     }
 
     public void showDebugView(final boolean show) {
@@ -178,6 +199,12 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
             mButtonsManager.onCheckedChanged(compoundButton, b);
     }
 
+    public void openExternalPlayer(Intent intent) {
+        if (getActivity() != null) {
+            ((PlayerListener) getActivity()).openExternalPlayer(intent);
+        }
+    }
+
     public void onPlayerAction() {
         Intent intent = mButtonsManager.createResultIntent();
         onPlayerAction(intent);
@@ -189,11 +216,21 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
                 for (PlayerEventListener listener : mListeners) {
                     listener.onPlayerClosed();
                 }
+
+                if (mSimpleExoPlayerView != null) {
+                    mSimpleExoPlayerView.setKeepScreenOn(false);
+                }
+
                 break;
             case ExoPlayerBaseFragment.TRACK_ENDED:
                 for (PlayerEventListener listener : mListeners) {
                     listener.onTrackEnded();
                 }
+
+                if (mSimpleExoPlayerView != null) {
+                    mSimpleExoPlayerView.setKeepScreenOn(false);
+                }
+
                 break;
         }
 
@@ -210,9 +247,27 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
             result.putExtra(VIDEO_POSITION, (float) mPlayer.getCurrentPosition() / 1_000);
         }
 
+        updateLastState(result);
+
         if (getActivity() != null) {
             ((PlayerListener) getActivity()).onPlayerAction(result);
         }
+    }
+
+    protected void updateLastState(Intent intent) {
+        if (intent == null) {
+            mPlaybackStopped = false;
+        } else {
+            mPlaybackStopped =
+                    intent.getBooleanExtra(BUTTON_BACK, false) ||
+                            intent.getBooleanExtra(BUTTON_NEXT, false) ||
+                            intent.getBooleanExtra(BUTTON_PREV, false) ||
+                            intent.getBooleanExtra(TRACK_ENDED, false);
+        }
+    }
+
+    protected boolean isPlaybackStopped() {
+        return mPlaybackStopped;
     }
 
     private void fixSuggestionFocusLost() {
@@ -224,9 +279,9 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         new Handler().postDelayed(mSimpleExoPlayerView::hideController, 500);
     }
 
-    protected void syncButtonStates() {
+    protected void syncButtonStates(boolean isNewVideo) {
         if (mButtonsManager != null) {
-            mButtonsManager.syncButtonStates();
+            mButtonsManager.syncButtonStates(isNewVideo);
         }
     }
 
@@ -258,9 +313,11 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         }
 
         if (view.getId() == R.id.btn_restrict_codec) {
-            SingleChoiceSelectorDialog.create(context, new RestrictFormatDialogSource(context), R.style.AppDialog);
+            SingleChoiceSelectorDialog.create(context, new RestrictFormatDialogSource(context, mSimpleExoPlayerView), R.style.AppDialog);
         } else if (view.getId() == R.id.btn_video_zoom) {
-            SingleChoiceSelectorDialog.create(context, new VideoZoomDialogSource(context, mVideoZoomManager), R.style.AppDialog);
+            SingleChoiceSelectorDialog.create(context, new VideoZoomDialogSource(context, mVideoZoomManager, mSimpleExoPlayerView), R.style.AppDialog);
+        } else if (view.getId() == R.id.btn_afr) {
+            CombinedChoiceSelectorDialog.create(context, new AfrDialogSource((ExoPlayerFragment) this), R.style.AppDialog);
         }
     }
 
@@ -272,6 +329,7 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
 
         addRestrictCodecButton();
         addVideoZoomButton();
+        addAfrButton();
     }
 
     private void addRestrictCodecButton() {
@@ -286,6 +344,14 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         TextToggleButton button = new TextToggleButton(getActivity());
         button.setId(R.id.btn_video_zoom);
         button.setText(R.string.btn_video_zoom);
+        button.setOnClickListener(this);
+        mDebugRootView.addView(button, mDebugRootView.getChildCount() - 1);
+    }
+
+    private void addAfrButton() {
+        TextToggleButton button = new TextToggleButton(getActivity());
+        button.setId(R.id.btn_afr);
+        button.setText(R.string.btn_afr);
         button.setOnClickListener(this);
         mDebugRootView.addView(button, mDebugRootView.getChildCount() - 1);
     }
@@ -338,6 +404,8 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
     protected void openVideoFromIntent(Intent intent) {
         Log.d(TAG, "Open video from intent=" + intent);
 
+        updateLastState(intent);
+
         if (isStateIntent(intent)) {
             if (getIntent() == null) {
                 setIntent(intent);
@@ -346,20 +414,38 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
             }
 
             mPlayerInitializer.initVideoTitle();
-            syncButtonStates();
-            return;
+            syncPlayerState();
+        } else {
+            ExoPreferences prefs = ExoPreferences.instance(getActivity());
+            prefs.setForceRestoreSpeed(false);
+
+            releasePlayer(); // dispose player
+            mShouldAutoPlay = true; // force autoplay
+            mNeedRetrySource = true; // process supplied intent
+            clearResumePosition(); // restore position will be done later from the app storage
+            setIntent(intent);
+            initializePlayer();
         }
+    }
 
-        ExoPreferences prefs = ExoPreferences.instance(getActivity());
-        prefs.setForceRestoreSpeed(false);
+    private void syncPlayerState() {
+        if (mPlayer != null) {
+            ExoIntent exoIntent = ExoIntent.parse(getIntent());
 
-        releasePlayer(); // dispose player
-        mShouldAutoPlay = true; // force autoplay
-        mNeedRetrySource = true; // process supplied intent
-        clearResumePosition(); // restore position will be done later from the app storage
-        setIntent(intent);
-        syncButtonStates(); // onCheckedChanged depends on this
-        initializePlayer();
+            if (exoIntent.getPositionSec() != -1) {
+                int positionMs = exoIntent.getPositionSec() * 1000;
+                long newPosMS = Math.abs(mPlayer.getCurrentPosition() - positionMs);
+
+                if (newPosMS > 1_000 && newPosMS < mPlayer.getDuration()) {
+                    mKeyHandler.seekTo(positionMs);
+                }
+            }
+
+            // afr auto-pause time fix
+            if (!mIsAfrApplying && getActivity() != null) {
+                mKeyHandler.pause(exoIntent.getPaused());
+            }
+        }
     }
 
     private boolean isStateIntent(Intent intent) {
@@ -377,12 +463,18 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         if (mPlayer != null) {
             mShouldAutoPlay = mPlayer.getPlayWhenReady(); // save paused state
             updateResumePosition(); // save position
+            mPlayer.setPlayWhenReady(false);
             mPlayer.release();
             resetUiState();
+            mKeyHandler.setDisableEvents(true);
         }
 
         if (mStateManager != null) {
             mStateManager.persistState();
+
+            if (isPlaybackStopped()) {
+                setIntent(null);
+            }
         }
 
         if (mDebugViewHelper != null) {
@@ -396,7 +488,7 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         mTrackSelectionHelper = null;
         mEventLogger = null;
         mIsDurationSet = false;
-        mRetryCount = 0;
+        mRestoreRetryCount = 0;
     }
 
     // ExoPlayer.EventListener implementation
@@ -408,38 +500,34 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
 
     @Override
     public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
-        measureLoadTime(playbackState);
-
         restorePlayerStateIfNeeded();
 
-        if (playbackState == Player.STATE_ENDED) {
-            onPlayerAction(ExoPlayerBaseFragment.TRACK_ENDED);
-        } else if (playbackState == Player.STATE_READY) {
-            for (PlayerEventListener listener : mListeners) {
-                listener.onPlaybackReady();
-            }
+        switch (playbackState) {
+            case Player.STATE_ENDED:
+                if (playWhenReady) {
+                    Log.d(TAG, "Track ended. Closing player...");
+                    onPlayerAction(ExoPlayerBaseFragment.TRACK_ENDED);
+                }
+                break;
+            case Player.STATE_READY:
+                for (PlayerEventListener listener : mListeners) {
+                    listener.onPlaybackReady();
+                }
 
-            //mSimpleExoPlayerView.setControllerAutoShow(true); // show ui on pause or buffering
-
-            mPlayerInitializer.initTimeBar(); // set proper time increments
-            mPlayerInitializer.initTitleQualityInfo();
+                mPlayerInitializer.initTimeBar(); // set proper time increments
+                mPlayerInitializer.initTitleQualityInfo();
+                break;
         }
 
         if (mSimpleExoPlayerView != null) {
             mSimpleExoPlayerView.setKeepScreenOn(playWhenReady && playbackState == Player.STATE_READY);
         }
 
+        SpeedDialogSource.handlePlayerState(playbackState, mPlayer);
+
         showHideLoadingMessage(playbackState);
 
         super.onPlayerStateChanged(playWhenReady, playbackState);
-    }
-
-    private void measureLoadTime(int playbackState) {
-        if (BuildConfig.DEBUG && (playbackState == Player.STATE_READY) && (mExtractStartMS != 0)) {
-            long extractedWithin = System.currentTimeMillis() - mExtractStartMS;
-            mExtractStartMS = 0;
-            Log.d(TAG, "Video loaded within: " + extractedWithin + " ms");
-        }
     }
 
     /**
@@ -532,20 +620,12 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
     }
 
     public void onSpeedClicked() {
-        CombinedChoiceSelectorDialog.create(getActivity(), new SpeedDialogSource((ExoPlayerFragment) this), R.style.AppDialog);
+        CombinedChoiceSelectorDialog.create(getActivity(), new SpeedDialogSource(getActivity(), mPlayer, mSimpleExoPlayerView), R.style.AppDialog);
     }
 
     @Override
     public boolean isUiVisible() {
         return mInterfaceVisibilityState == View.VISIBLE;
-    }
-
-    private void restoreSpeed() {
-        ExoPreferences prefs = ExoPreferences.instance(getActivity());
-
-        if (prefs.getRestoreSpeed() || prefs.getForceRestoreSpeed()) {
-            mPlayer.setPlaybackParameters(new PlaybackParameters(Float.parseFloat(prefs.getCurrentSpeed()), 1.0f));
-        }
     }
 
     private void restorePlayerStateIfNeeded() {
@@ -587,5 +667,9 @@ public abstract class ExoPlayerBaseFragment extends PlayerCoreFragment {
         for (PlayerEventListener listener : mListeners) {
             listener.onAppResume();
         }
+    }
+
+    public void setAfrApplying(boolean applying) {
+        mIsAfrApplying = applying;
     }
 }

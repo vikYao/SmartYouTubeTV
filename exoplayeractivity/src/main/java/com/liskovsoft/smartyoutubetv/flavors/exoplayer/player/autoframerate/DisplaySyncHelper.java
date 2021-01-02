@@ -25,10 +25,11 @@ class DisplaySyncHelper implements UhdHelperListener {
     private boolean mDisplaySyncInProgress = false;
     private UhdHelper mUhdHelper;
     protected DisplayHolder.Mode mOriginalMode;
-    protected DisplayHolder.Mode mNewMode;
+    private DisplayHolder.Mode mNewMode;
     private DisplayHolder.Mode mCurrentMode;
     // switch not only framerate but resolution too
-    protected static boolean SWITCH_TO_UHD = true;
+    private boolean mSwitchToUHD;
+    private boolean mSwitchToFHD;
     private int mModeLength = -1;
     private AutoFrameRateListener mListener;
 
@@ -64,6 +65,11 @@ class DisplaySyncHelper implements UhdHelperListener {
 
     private ArrayList<DisplayHolder.Mode> filterModes(DisplayHolder.Mode[] oldModes, int minHeight, int maxHeight) {
         ArrayList<DisplayHolder.Mode> newModes = new ArrayList<>();
+
+        if (minHeight == -1 || maxHeight == -1) {
+            return newModes;
+        }
+
         int modesNum = oldModes.length;
 
         for (int i = 0; i < modesNum; ++i) {
@@ -75,9 +81,9 @@ class DisplaySyncHelper implements UhdHelperListener {
         }
 
         if (newModes.isEmpty()) {
-            Log.i(TAG, "NO MODES FOUND!! " + Arrays.asList(oldModes));
+            Log.i(TAG, "MODE CANDIDATES NOT FOUND!! Old modes: " + Arrays.asList(oldModes));
         } else {
-            Log.i(TAG, "FOUND MODES! " + newModes);
+            Log.i(TAG, "FOUND MODE CANDIDATES! New modes: " + newModes);
         }
 
         return newModes;
@@ -200,21 +206,28 @@ class DisplaySyncHelper implements UhdHelperListener {
     public void onModeChanged(DisplayHolder.Mode mode) {
         mDisplaySyncInProgress = false;
 
-        if (mode == null && mUhdHelper.getCurrentMode() == null) {
-            String msg = "Mode changed Failure, Internal error occurred.";
+        Mode currentMode = mUhdHelper.getCurrentMode();
+
+        if (mode == null && currentMode == null) {
+            String msg = "Mode change failure. Internal error occurred.";
             Log.w(TAG, msg);
+
+            CommonApplication.getPreferences().setCurrentDisplayMode(msg);
         } else {
             int modeId = mNewMode != null ? mNewMode.getModeId() : -1;
-            if (mUhdHelper.getCurrentMode().getModeId() != modeId) {
+
+            if (currentMode.getModeId() != modeId) {
                 // Once onDisplayChangedListener sends proper callback, the above if condition
                 // need to changed to mode.getModeId() != modeId
-                String msg = String.format("Mode changed Failure, Current mode id is %s, Expected mode id is %s", mUhdHelper.getCurrentMode().getModeId(), modeId);
+                String msg = String.format("Mode change failure. Current mode id is %s. Expected mode id is %s", currentMode.getModeId(), modeId);
                 Log.w(TAG, msg);
-            }
-            else {
+
+                String newMsg = String.format("Expected %s", UhdHelper.formatMode(mNewMode));
+                CommonApplication.getPreferences().setCurrentDisplayMode(String.format("%s (%s)", UhdHelper.formatMode(currentMode), newMsg));
+            } else {
                 Log.i(TAG, "Mode changed successfully");
 
-                CommonApplication.getPreferences().setCurrentDisplayMode(UhdHelper.formatMode(mNewMode));
+                CommonApplication.getPreferences().setCurrentDisplayMode(UhdHelper.formatMode(currentMode));
             }
         }
     }
@@ -244,47 +257,54 @@ class DisplaySyncHelper implements UhdHelperListener {
 
             boolean needResolutionSwitch = false;
 
-            List<DisplayHolder.Mode> resultModes = new ArrayList<>();
+            List<DisplayHolder.Mode> resultModes;
 
-            if (SWITCH_TO_UHD) { // switch not only framerate but resolution too
-                int minHeight;
-                int maxHeight;
+            int minHeight = -1;
+            int maxHeight = -1;
 
+            if (mSwitchToUHD) { // switch not only framerate but resolution too
                 if (videoWidth > 1920) {
                     minHeight = 2160;
                     maxHeight = 5000;
-                } else {
+                }
+            }
+
+            if (mSwitchToFHD) { // switch not only framerate but resolution too
+                if (videoWidth <= 1920) {
                     minHeight = 1080;
                     maxHeight = 1080;
                 }
+            }
 
-                resultModes = filterModes(modes, minHeight, maxHeight);
+            resultModes = filterModes(modes, minHeight, maxHeight);
 
-                if (!resultModes.isEmpty()) {
-                    needResolutionSwitch = true;
-                }
+            if (!resultModes.isEmpty()) {
+                needResolutionSwitch = true;
             }
 
             Log.i(TAG, "Need resolution switch: " + needResolutionSwitch);
 
-            DisplayHolder.Mode mode = mUhdHelper.getCurrentMode();
+            DisplayHolder.Mode currentMode = mUhdHelper.getCurrentMode();
 
             if (!needResolutionSwitch) {
-                resultModes = filterSameResolutionModes(modes, mode);
+                resultModes = filterSameResolutionModes(modes, currentMode);
             }
 
             DisplayHolder.Mode closerMode = findCloserMode(resultModes, videoFramerate);
 
             if (closerMode == null) {
-                Log.i(TAG, "Could not find closer refresh rate for " + videoFramerate + "fps");
+                String msg = "Could not find closer refresh rate for " + videoFramerate + "fps";
+                Log.i(TAG, msg);
+                CommonApplication.getPreferences().setCurrentDisplayMode(String.format("%s (%s)", UhdHelper.formatMode(currentMode), msg));
                 return false;
             }
 
-            Log.i(TAG, "Found closer framerate: " + closerMode.getRefreshRate() + " for fps " + videoFramerate);
-            Log.i(TAG, "Current mode: " + mode);
+            Log.i(TAG, "Found closer mode: " + closerMode + " for fps " + videoFramerate);
+            Log.i(TAG, "Current mode: " + currentMode);
 
-            if (closerMode.equals(mode)) {
+            if (closerMode.equals(currentMode)) {
                 Log.i(TAG, "Do not need to change mode.");
+                CommonApplication.getPreferences().setCurrentDisplayMode(UhdHelper.formatMode(currentMode));
                 return false;
             }
             
@@ -339,6 +359,7 @@ class DisplaySyncHelper implements UhdHelperListener {
             switch (state) {
                 case STATE_ORIGINAL:
                     mOriginalMode = mode;
+                    CommonApplication.getPreferences().setDefaultDisplayMode(UhdHelper.formatMode(mode));
                     break;
                 case STATE_CURRENT:
                     mCurrentMode = mode;
@@ -384,5 +405,37 @@ class DisplaySyncHelper implements UhdHelperListener {
 
     public void setListener(AutoFrameRateListener listener) {
         mListener = listener;
+    }
+
+    /**
+     * Set default mode to 1920x1080@50<br/>
+     * Because switch not work with some devices running at 60HZ. Like: UGOOS
+     */
+    public void applyModeChangeFix(Window window) {
+        if (mOriginalMode != null) {
+            if (mOriginalMode.getRefreshRate() > 55) {
+                setDefaultMode(window, mOriginalMode.getPhysicalWidth(), 50);
+            } else {
+                setDefaultMode(window, mOriginalMode.getPhysicalWidth(), 60);
+            }
+        } else {
+            setDefaultMode(window, 1080, 50);
+        }
+    }
+
+    private void setDefaultMode(Window window, int width, float frameRate) {
+        syncDisplayMode(window, width, frameRate);
+
+        if (mNewMode != null) {
+            mOriginalMode = mNewMode;
+            CommonApplication.getPreferences().setDefaultDisplayMode(UhdHelper.formatMode(mOriginalMode));
+        }
+    }
+
+    public void setResolutionSwitchEnabled(boolean enabled) {
+        mSwitchToUHD = enabled;
+
+        //mSwitchToFHD = !Build.BRAND.equals("Sasvlad"); // Ugoos custom firmware fix
+        mSwitchToFHD = enabled;
     }
 }

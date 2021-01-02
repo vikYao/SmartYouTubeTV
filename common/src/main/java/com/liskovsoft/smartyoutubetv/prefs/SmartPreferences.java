@@ -12,17 +12,23 @@ public final class SmartPreferences extends SmartPreferencesBase {
     private static final String BOOTSTRAP_UPDATE_CHECK = "bootstrapUpdateCheck";
     private static final String BOOTSTRAP_END_CARDS = "bootstrapEndCards";
     private static final String PREFERRED_CODEC = "preferredCodec";
-    private static final String BOOTSTRAP_OK_PAUSE = "bootstrapOKPause";
     private static final String UNPLAYABLE_VIDEO_FIX = "unplayableVideoFix";
     private static final String LOCK_LAST_LAUNCHER = "lockLastLauncher";
     private static final String BOOT_PAGE = "bootPage";
     private static final String GLOBAL_AFR_FIX_STATE = "afrFixState";
-    private static final String USE_EXTERNAL_PLAYER = "use_external_player";
+    private static final String USE_EXTERNAL_PLAYER = "use_external_player2";
+    public static final String USE_EXTERNAL_PLAYER_NONE = "use_external_player_none";
+    public static final String USE_EXTERNAL_PLAYER_4K = "use_external_player_4k";
+    public static final String USE_EXTERNAL_PLAYER_FHD = "use_external_player_fhd";
+    public static final String USE_EXTERNAL_PLAYER_SD = "use_external_player_sd";
+    public static final String USE_EXTERNAL_PLAYER_KODI = "use_external_player_kodi";
     private static final String FIX_ASPECT_RATIO = "fix_aspect_ratio";
-    private static final String LOG_TYPE = "log_type";
+    private static final String LOG_TYPE = "log_type2";
     private static final String PLAYBACK_WORKING_KEY = "playback_working_key";
     private static final String ANIMATED_PREVIEWS = "animated_previews";
+    private static final String HIGH_CONTRAST_MODE = "high_contrast_mode";
     public static final String MUSIC_PAGE = "music_page";
+    public static final String HISTORY_PAGE = "history_page";
     public static final String SUBSCRIPTIONS_PAGE = "subscriptions_page";
     public static final String WATCH_LATER_PAGE = "watch_later_page";
     public static final String DEFAULT_PAGE = "default_page";
@@ -37,20 +43,64 @@ public final class SmartPreferences extends SmartPreferencesBase {
     private static final String BOOT_SUCCEEDED = "boot_succeeded";
     private static final String ALT_PLAYER_MAPPING = "alt_player_mapping";
     private static final String DISABLE_AMAZON_BRIDGE = "disable_amazon_bridge";
+    private static final String UGOOS_50HZ_FIX = "UGOOS_50HZ_FIX";
     private static final String USE_NEW_UI = "use_new_ui";
+    private static final String HIDE_BOOT_TIPS = "hide_boot_tips";
+    private static final String AUTO_SHOW_PLAYER_UI = "auto_show_player_ui";
+    public static final String NEW_VIDEO_OPENED = "new_video_opened";
+    public static final String CURRENT_VIDEO_POSITION = "current_video_position";
+    public static final String CURRENT_VIDEO_PAUSED = "current_video_paused";
+    private static final String USER_IS_LOGGED = "user_is_logged";
+    private static final String HIGH_CONTRAST_ENABLED = "high_contrast_enabled";
+    public static final String AD_BLOCK_STATUS = "ad_block_status";
+    public static final String AD_BLOCK_ENABLED = "ad_block_enabled";
+    public static final String AD_BLOCK_DISABLED = "ad_block_disabled";
+    public static final String AD_BLOCK_UNDEFINED = "ad_block_undefined";
+    private static final String DECREASE_PLAYER_UI_TIMEOUT = "decrease_player_ui_timeout";
+    private static final String OPEN_LINKS_IN_SIMPLE_VIEW = "open_links_in_simple_view";
+    private static final String PLAYER_BUFFER_TYPE = "player_buffer_type";
+    public static final String PLAYER_BUFFER_TYPE_LOW = "player_buffer_type_low";
+    public static final String PLAYER_BUFFER_TYPE_MEDIUM = "player_buffer_type_medium";
+    public static final String PLAYER_BUFFER_TYPE_HIGH = "player_buffer_type_high";
+    private static final String ENABLE_VIDEO_MENU = "enable_video_menu";
+    private static final String ENABLE_ANIMATED_UI = "enable_animated_ui";
+    private static final String OK_PAUSE_TYPE = "ok_pause_type";
+    public static final String OK_PAUSE_TYPE_DEFAULT = "ok_pause_type_default";
+    public static final String OK_PAUSE_TYPE_WITH_UI = "ok_pause_type_with_ui";
+    public static final String OK_PAUSE_TYPE_WITHOUT_UI = "ok_pause_type_without_ui";
+    public static final String VIDEO_TYPE_UNDEFINED = "video_type_undefined";
+    public static final String VIDEO_TYPE_DEFAULT = "video_type_default";
+    public static final String VIDEO_TYPE_LIVE = "video_type_live";
+    public static final String VIDEO_TYPE_UPCOMING = "video_type_upcoming";
+    public static final String WEB_PROXY_URI = "web_proxy_url";
+    public static final String WEB_PROXY_ENABLED = "web_proxy_enabled";
     public static final int PLAYBACK_UNKNOWN = 0;
     public static final int PLAYBACK_IS_WORKING = 1;
     public static final int PLAYBACK_NOT_WORKING = 2;
     public static final String AVC = "avc";
     public static final String VP9 = "vp9";
+    public static final String ALL_CODECS = "all_codecs";
     public static final String NONE = "";
     private static SmartPreferences sInstance;
-    private int mPositionSec;
+    private int mPositionSec = -1;
+    private String mVideoType = VIDEO_TYPE_UNDEFINED;
     private long mLastUserInteraction;
     private String mAuthorizationHeader;
     private String mCookieHeader;
     private String mDefaultDisplayMode;
     private String mCurrentDisplayMode;
+    private String mPostData;
+    private boolean mUserLogged;
+    private boolean mVideoPaused;
+    private boolean mMirrorEnabled;
+    private boolean mIsBrowserInBackground;
+    private long mVideoOpenTimeMS;
+    private String mVideoSrc;
+    private long mVideoActionTimeMS;
+    private String mVisitorIdHeader;
+    private String mClientDataHeader;
+    private String mInterceptUserAgent;
+    private boolean mIsLanguageChanged;
 
     public static SmartPreferences instance(Context ctx) {
         if (sInstance == null)
@@ -122,14 +172,6 @@ public final class SmartPreferences extends SmartPreferencesBase {
         return getBoolean(BOOTSTRAP_END_CARDS, true);
     }
 
-    public void setEnableOKPause(boolean isChecked) {
-        putBoolean(BOOTSTRAP_OK_PAUSE, isChecked);
-    }
-
-    public boolean getEnableOKPause() {
-        return getBoolean(BOOTSTRAP_OK_PAUSE, true);
-    }
-
     public void setUnplayableVideoFix(boolean isChecked) {
         putBoolean(UNPLAYABLE_VIDEO_FIX, isChecked);
     }
@@ -162,12 +204,12 @@ public final class SmartPreferences extends SmartPreferencesBase {
         return getString(GLOBAL_AFR_FIX_STATE, GLOBAL_AFR_FIX_STATE_DISABLED);
     }
 
-    public void setUseExternalPlayer(boolean isChecked) {
-        putBoolean(USE_EXTERNAL_PLAYER, isChecked);
+    public void setUseExternalPlayer(String type) {
+        putString(USE_EXTERNAL_PLAYER, type);
     }
 
-    public boolean getUseExternalPlayer() {
-        return getBoolean(USE_EXTERNAL_PLAYER, false);
+    public String getUseExternalPlayer() {
+        return getString(USE_EXTERNAL_PLAYER, USE_EXTERNAL_PLAYER_NONE);
     }
 
     public void setFixAspectRatio(boolean isChecked) {
@@ -178,12 +220,12 @@ public final class SmartPreferences extends SmartPreferencesBase {
         return getBoolean(FIX_ASPECT_RATIO, false);
     }
 
-    public int getLogType() {
-        return getInt(LOG_TYPE, Log.LOG_TYPE_SYSTEM);
+    public String getLogType() {
+        return getString(LOG_TYPE, Log.LOG_TYPE_SYSTEM);
     }
 
-    public void setLogType(int type) {
-        putInt(LOG_TYPE, type);
+    public void setLogType(String type) {
+        putString(LOG_TYPE, type);
     }
 
     public void setPlaybackWorking(int state) {
@@ -200,6 +242,14 @@ public final class SmartPreferences extends SmartPreferencesBase {
 
     public void setEnableAnimatedPreviews(boolean enable) {
         putBoolean(ANIMATED_PREVIEWS, enable);
+    }
+
+    public boolean getEnableHighContrastMode() {
+        return getBoolean(HIGH_CONTRAST_MODE, false);
+    }
+
+    public void setEnableHighContrastMode(boolean enable) {
+        putBoolean(HIGH_CONTRAST_MODE, enable);
     }
 
     public boolean isAppJustInstalled() {
@@ -230,12 +280,51 @@ public final class SmartPreferences extends SmartPreferencesBase {
         putInt(PREVIOUS_APP_VERSION_CODE, versionCode);
     }
 
+    public long getLastUserActionTimeMS() {
+        long result = mVideoActionTimeMS;
+        mVideoActionTimeMS = 0;
+        return result;
+    }
+
+    public void setNewVideoSrc(String src) {
+        mVideoSrc = src;
+        mVideoActionTimeMS = System.currentTimeMillis();
+
+        runListeners(NEW_VIDEO_OPENED);
+    }
+
+    public String getNewVideoSrc() {
+        return mVideoSrc;
+    }
+
     public void setCurrentVideoPosition(int positionSec) {
         mPositionSec = positionSec;
+        mVideoActionTimeMS = System.currentTimeMillis();
+
+        runListeners(CURRENT_VIDEO_POSITION);
     }
 
     public long getCurrentVideoPosition() {
         return mPositionSec;
+    }
+
+    public void setCurrentVideoType(String videoType) {
+        mVideoType = videoType;
+    }
+
+    public String getCurrentVideoType() {
+        return mVideoType;
+    }
+
+    public void setHtmlVideoPaused(boolean paused) {
+        mVideoPaused = paused;
+        mVideoActionTimeMS = System.currentTimeMillis();
+
+        runListeners(CURRENT_VIDEO_PAUSED);
+    }
+
+    public boolean getHtmlVideoPaused() {
+        return mVideoPaused;
     }
 
     public void setBootSucceeded(boolean succeeded) {
@@ -254,6 +343,54 @@ public final class SmartPreferences extends SmartPreferencesBase {
         return getBoolean(ALT_PLAYER_MAPPING, false);
     }
 
+    public void setDisableYouTubeBridge(boolean disable) {
+        putBoolean(DISABLE_AMAZON_BRIDGE, disable);
+    }
+
+    public boolean getDisableYouTubeBridge() {
+        return getBoolean(DISABLE_AMAZON_BRIDGE, false);
+    }
+
+    public boolean getUseNewUI() {
+        return getBoolean(USE_NEW_UI, false);
+    }
+
+    public void setUseNewUI(boolean useNewUI) {
+        putBoolean(USE_NEW_UI, useNewUI);
+    }
+
+    public boolean getUgoos50HZFix() {
+        return getBoolean(UGOOS_50HZ_FIX, false);
+    }
+
+    public void setUgoos50HZFix(boolean checked) {
+        putBoolean(UGOOS_50HZ_FIX, checked);
+    }
+
+    public boolean getHideBootTips() {
+        return getBoolean(HIDE_BOOT_TIPS, false);
+    }
+
+    public void setHideBootTips(boolean checked) {
+        putBoolean(HIDE_BOOT_TIPS, checked);
+    }
+
+    public boolean getAutoShowPlayerUI() {
+        return getBoolean(AUTO_SHOW_PLAYER_UI, true);
+    }
+
+    public void setAutoShowPlayerUI(boolean checked) {
+        putBoolean(AUTO_SHOW_PLAYER_UI, checked);
+    }
+
+    public String getOKPauseType() {
+        return getString(OK_PAUSE_TYPE, OK_PAUSE_TYPE_WITH_UI);
+    }
+
+    public void setOKPauseType(String pauseType) {
+        putString(OK_PAUSE_TYPE, pauseType);
+    }
+
     // NOT PERSISTENT SETTINGS
 
     public long getLastUserInteraction() {
@@ -270,6 +407,22 @@ public final class SmartPreferences extends SmartPreferencesBase {
 
     public String getAuthorizationHeader() {
         return mAuthorizationHeader;
+    }
+
+    public void setVisitorIdHeader(String header) {
+        mVisitorIdHeader = header;
+    }
+
+    public String getVisitorIdHeader() {
+        return mVisitorIdHeader;
+    }
+
+    public void setClientDataHeader(String header) {
+        mClientDataHeader = header;
+    }
+
+    public String getClientDataHeader() {
+        return mClientDataHeader;
     }
 
     public void setCookieHeader(String header) {
@@ -296,19 +449,128 @@ public final class SmartPreferences extends SmartPreferencesBase {
         mCurrentDisplayMode = mode;
     }
 
-    public void setDisableYouTubeBridge(boolean disable) {
-        putBoolean(DISABLE_AMAZON_BRIDGE, disable);
+    public void setPostData(String content) {
+        mPostData = content;
     }
 
-    public boolean getDisableYouTubeBridge() {
-        return getBoolean(DISABLE_AMAZON_BRIDGE, false);
+    public String getPostData() {
+        return mPostData;
     }
 
-    public boolean getUseNewUI() {
-        return getBoolean(USE_NEW_UI, false);
+    public void setUserLogged(boolean userLogged) {
+        putBoolean(USER_IS_LOGGED, userLogged);
     }
 
-    public void setUseNewUI(boolean useNewUI) {
-        putBoolean(USE_NEW_UI, useNewUI);
+    public boolean isUserLogged() {
+        return getBoolean(USER_IS_LOGGED, false);
     }
+
+    public void sync() {
+        setUserLogged(getAuthorizationHeader() != null);
+    }
+
+    public boolean isMirrorEnabled() {
+        return mMirrorEnabled;
+    }
+
+    public void setMirrorEnabled(boolean enabled) {
+        mMirrorEnabled = enabled;
+    }
+
+
+    public boolean isBrowserInBackground() {
+        return mIsBrowserInBackground;
+    }
+
+    public void setBrowserInBackground(boolean inBackground) {
+        mIsBrowserInBackground = inBackground;
+    }
+
+    public boolean isHighContrastEnabled() {
+        return getBoolean(HIGH_CONTRAST_ENABLED, false);
+    }
+
+    public void setHighContrastEnabled(boolean enabled) {
+        putBoolean(HIGH_CONTRAST_ENABLED, enabled);
+    }
+
+    public void setVideoOpenTime(long timeMs) {
+        mVideoOpenTimeMS = timeMs;
+    }
+
+    public long getVideoOpenTime() {
+        return mVideoOpenTimeMS;
+    }
+
+    public boolean isAdBlockEnabled() {
+        String adBlockStatus = getAdBlockStatus();
+
+        boolean userEnabledAdBlock = AD_BLOCK_ENABLED.equals(adBlockStatus) || AD_BLOCK_UNDEFINED.equals(adBlockStatus);
+
+        return true;
+    }
+
+    public String getAdBlockStatus() {
+        return getString(AD_BLOCK_STATUS, AD_BLOCK_ENABLED);
+    }
+
+    public void setAdBlockStatus(String adBlockEnabled) {
+        putString(AD_BLOCK_STATUS, adBlockEnabled);
+    }
+
+    public boolean getDecreasePlayerUITimeout() {
+        return getBoolean(DECREASE_PLAYER_UI_TIMEOUT, false);
+    }
+
+    public void setDecreasePlayerUITimeout(boolean checked) {
+        putBoolean(DECREASE_PLAYER_UI_TIMEOUT, checked);
+    }
+
+    public boolean getOpenLinksInSimplePlayer() {
+        return getBoolean(OPEN_LINKS_IN_SIMPLE_VIEW, false);
+    }
+
+    public void setOpenLinksInSimpleView(boolean checked) {
+        putBoolean(OPEN_LINKS_IN_SIMPLE_VIEW, checked);
+    }
+
+    public String getPlayerBufferType() {
+        return getString(PLAYER_BUFFER_TYPE, PLAYER_BUFFER_TYPE_LOW);
+    }
+
+    public void setPlayerBufferType(String playerBufferType) {
+        putString(PLAYER_BUFFER_TYPE, playerBufferType);
+    }
+
+    public void setInterceptUserAgent(String userAgent) {
+        mInterceptUserAgent = userAgent;
+    }
+
+    public String getInterceptUserAgent() {
+        return mInterceptUserAgent;
+    }
+
+    public boolean getEnableVideoMenu() {
+        return getBoolean(ENABLE_VIDEO_MENU, false);
+    }
+
+    public void setEnableVideoMenu(boolean enable) {
+        putBoolean(ENABLE_VIDEO_MENU, enable);
+    }
+
+    public boolean getEnableAnimatedUI() {
+        return getBoolean(ENABLE_ANIMATED_UI, false);
+    }
+
+    public void setEnableAnimatedUI(boolean enable) {
+        putBoolean(ENABLE_ANIMATED_UI, enable);
+    }
+
+    public String getWebProxyUri() { return getString(WEB_PROXY_URI, ""); }
+
+    public void setWebProxyUri(String webProxy) { putString(WEB_PROXY_URI, webProxy); }
+
+    public boolean getWebProxyEnabled() { return getBoolean(WEB_PROXY_ENABLED, false); }
+
+    public void setWebProxyEnabled(boolean enable) { putBoolean(WEB_PROXY_ENABLED, enable);}
 }

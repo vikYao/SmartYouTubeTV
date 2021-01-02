@@ -2,13 +2,18 @@ package com.liskovsoft.smartyoutubetv.misc.appstatewatcher.handlers;
 
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.pm.PackageManager;
 import android.os.Environment;
 import android.os.Handler;
+import androidx.annotation.NonNull;
 import com.liskovsoft.sharedutils.dialogs.YesNoDialog;
 import com.liskovsoft.sharedutils.helpers.FileHelpers;
+import com.liskovsoft.sharedutils.helpers.PermissionHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.R;
 import com.liskovsoft.smartyoutubetv.misc.SmartUtils;
+import com.liskovsoft.smartyoutubetv.misc.appstatewatcher.AppStateWatcherBase;
 import com.liskovsoft.smartyoutubetv.misc.appstatewatcher.AppStateWatcherBase.StateHandler;
 
 import java.io.File;
@@ -18,6 +23,7 @@ import java.util.List;
 public class BackupAndRestoreHandler extends StateHandler implements DialogInterface.OnClickListener {
     private static final String TAG = BackupAndRestoreHandler.class.getSimpleName();
     private final Context mContext;
+    private final AppStateWatcherBase mAppStateWatcher;
     private final List<File> mDataDirs;
     private static final String WEBVIEW_SUBDIR = "app_webview";
     private static final String XWALK_SUBDIR = "app_xwalkcore";
@@ -25,17 +31,19 @@ public class BackupAndRestoreHandler extends StateHandler implements DialogInter
     private final List<File> mBackupDirs;
     private boolean mIsFirstRun;
     private boolean mIsUpdate;
+    private Runnable mPendingHandler;
 
-    public BackupAndRestoreHandler(Context context) {
+    public BackupAndRestoreHandler(Context context, AppStateWatcherBase appStateWatcher) {
         mContext = context;
+        mAppStateWatcher = appStateWatcher;
         mDataDirs = new ArrayList<>();
         mDataDirs.add(new File(mContext.getApplicationInfo().dataDir, WEBVIEW_SUBDIR));
         mDataDirs.add(new File(mContext.getApplicationInfo().dataDir, XWALK_SUBDIR));
         mDataDirs.add(new File(mContext.getApplicationInfo().dataDir, SHARED_PREFS_SUBDIR));
 
         mBackupDirs = new ArrayList<>();
-        mBackupDirs.add(new File(Environment.getExternalStorageDirectory(), String.format("data/%s/Backup", mContext.getPackageName())));
-        mBackupDirs.add(new File(Environment.getExternalStorageDirectory(), String.format("data/%s/Backup", "com.liskovsoft.videomanager")));
+        mBackupDirs.add(new File(FileHelpers.getBackupDir(mContext), "Backup"));
+        //mBackupDirs.add(new File(Environment.getExternalStorageDirectory(), String.format("data/%s/Backup", "com.liskovsoft.videomanager")));
     }
 
     @Override
@@ -52,6 +60,10 @@ public class BackupAndRestoreHandler extends StateHandler implements DialogInter
 
     @Override
     public void onLoad() {
+        mAppStateWatcher.addRunAfterLock(this::runDialog);
+    }
+
+    private void runDialog() {
         // permissions dialog should be closed at this point
         if (mIsFirstRun) {
             boolean backupFound = false;
@@ -78,13 +90,19 @@ public class BackupAndRestoreHandler extends StateHandler implements DialogInter
         switch (which) {
             case DialogInterface.BUTTON_POSITIVE:
                 //Yes button clicked
-                restoreData();
+                if (PermissionHelpers.hasStoragePermissions(mContext)) {
+                    restoreData();
+                } else {
+                    mPendingHandler = this::restoreData;
+                    verifyStoragePermissionsAndReturn();
+                }
                 break;
 
             case DialogInterface.BUTTON_NEGATIVE:
                 //No button clicked
                 break;
         }
+        mAppStateWatcher.setLock(false);
     }
 
     private void checkPermAndProposeRestore() {
@@ -94,8 +112,19 @@ public class BackupAndRestoreHandler extends StateHandler implements DialogInter
     }
 
     private void checkPermAndBackup() {
-        if (FileHelpers.isExternalStorageWritable()) {
-            backupData();
+        boolean isUerAuth = CommonApplication.getPreferences().getAuthorizationHeader() != null;
+
+        if (isUerAuth) {
+            if (FileHelpers.isExternalStorageWritable()) {
+                if (PermissionHelpers.hasStoragePermissions(mContext)) {
+                    backupData();
+                } else {
+                    mPendingHandler = this::backupData;
+                    verifyStoragePermissionsAndReturn();
+                }
+            }
+        } else {
+            Log.d(TAG, "User not authorized. Cancelling backup...");
         }
     }
 
@@ -151,6 +180,25 @@ public class BackupAndRestoreHandler extends StateHandler implements DialogInter
     }
 
     private void askUserPermission() {
+        mAppStateWatcher.setLock(true);
         YesNoDialog.create(mContext, R.string.do_restore_data_msg, this, R.style.AppDialog);
+    }
+
+    private void verifyStoragePermissionsAndReturn() {
+        PermissionHelpers.verifyStoragePermissions(mContext);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == PermissionHelpers.REQUEST_EXTERNAL_STORAGE) {
+            if (grantResults.length >= 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "REQUEST_EXTERNAL_STORAGE permission has been granted");
+
+                if (mPendingHandler != null) {
+                    mPendingHandler.run();
+                    mPendingHandler = null;
+                }
+            }
+        }
     }
 }

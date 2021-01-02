@@ -22,7 +22,8 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Parses input (get_video_info) to {@link MediaItem}
+ * Parses input (get_video_info) to {@link MediaItem}<br/>
+ * For more info see {@link JsonInfoParser}
  */
 public class YouTubeMediaParser {
     private static final String TAG = YouTubeMediaParser.class.getSimpleName();
@@ -50,7 +51,7 @@ public class YouTubeMediaParser {
         mContent = content;
         mId = new Random().nextInt();
 
-        if (Log.getLogType() == Log.LOG_TYPE_FILE) {
+        if (Log.getLogType().equals(Log.LOG_TYPE_FILE)) {
             Log.d(TAG, content);
         }
 
@@ -60,7 +61,7 @@ public class YouTubeMediaParser {
     public GenericInfo extractGenericInfo() {
         GenericInfo info = new SimpleYouTubeGenericInfo();
         Uri videoInfo = ParserUtils.parseUri(mContent);
-        info.setLengthSeconds(videoInfo.getQueryParameter(GenericInfo.LENGTH_SECONDS));
+        info.setLengthSeconds(getDuration(videoInfo));
         info.setTitle(videoInfo.getQueryParameter(GenericInfo.TITLE));
         info.setAuthor(videoInfo.getQueryParameter(GenericInfo.AUTHOR));
         info.setViewCount(videoInfo.getQueryParameter(GenericInfo.VIEW_COUNT));
@@ -68,8 +69,14 @@ public class YouTubeMediaParser {
         return info;
     }
 
+    private String getDuration(Uri videoInfo) {
+        String duration = videoInfo.getQueryParameter(GenericInfo.LENGTH_SECONDS);
+        // new video_info format: video len moved to the nested JSON object
+        return duration == null ? mParser.extractDurationMs() : duration;
+    }
+
     private void extractHlsUrl() {
-        String url = ParserUtils.extractParam(mContent, HLS_URL);
+        String url = ParserUtils.extractParam(HLS_URL, mContent);
 
         if (url == null) {
             url = mParser.extractHlsUrl();
@@ -86,7 +93,7 @@ public class YouTubeMediaParser {
     }
 
     private void extractDashMPDUrl() {
-        String url = ParserUtils.extractParam(mContent, DASH_MPD_URL);
+        String url = ParserUtils.extractParam(DASH_MPD_URL, mContent);
 
         if (url == null) {
             url = mParser.extractDashUrl();
@@ -100,7 +107,7 @@ public class YouTubeMediaParser {
         List<MediaItem> list = new ArrayList<>();
         List<String> items = new ArrayList<>();
 
-        String formats = ParserUtils.extractParam(content, queryParam);
+        String formats = ParserUtils.extractParam(queryParam, content);
 
         // stream may not contain formats
         if (formats != null) {
@@ -135,6 +142,13 @@ public class YouTubeMediaParser {
             if (items != null) {
                 list.addAll(items);
             }
+
+            // Simple formats with integrated video and audio (360p for music, 720p for other content).
+            List<MediaItem> items2 = mParser.extractLowQualityFormats();
+
+            if (items2 != null) {
+                list.addAll(items2);
+            }
         }
 
         return list;
@@ -164,7 +178,7 @@ public class YouTubeMediaParser {
         mediaItem.setUrl(String.valueOf(content.get(MediaItem.URL)));
         mediaItem.setITag(Helpers.toIntString(content.get(MediaItem.ITAG)));
         mediaItem.setType(String.valueOf(content.get(MediaItem.TYPE)));
-        mediaItem.setS(String.valueOf(content.get(MediaItem.S)));
+        mediaItem.setSignatureCipher(String.valueOf(content.get(MediaItem.S)));
         mediaItem.setClen(String.valueOf(content.get(MediaItem.CLEN)));
         mediaItem.setFps(String.valueOf(content.get(MediaItem.FPS)));
         mediaItem.setIndex(String.valueOf(content.get(MediaItem.INDEX)));
@@ -180,7 +194,7 @@ public class YouTubeMediaParser {
         mediaItem.setUrl(mediaUrl.getQueryParameter(MediaItem.URL));
         mediaItem.setITag(mediaUrl.getQueryParameter(MediaItem.ITAG));
         mediaItem.setType(mediaUrl.getQueryParameter(MediaItem.TYPE));
-        mediaItem.setS(mediaUrl.getQueryParameter(MediaItem.S));
+        mediaItem.setSignatureCipher(mediaUrl.getQueryParameter(MediaItem.S));
         mediaItem.setClen(mediaUrl.getQueryParameter(MediaItem.CLEN));
         mediaItem.setFps(mediaUrl.getQueryParameter(MediaItem.FPS));
         mediaItem.setIndex(mediaUrl.getQueryParameter(MediaItem.INDEX));
@@ -202,7 +216,6 @@ public class YouTubeMediaParser {
         List<String> result = new ArrayList<>();
 
         for (MediaItem item : mMediaItems) {
-            prepareForDecipher(item);
             result.add(findStrangeSignature(item));
         }
 
@@ -220,7 +233,7 @@ public class YouTubeMediaParser {
     private String findStrangeSignature(MediaItem item) {
         MyQueryString query = MyQueryStringFactory.parse(item.getUrl());
         return findStrangeSignature(
-                item.getS(),
+                item.getSignatureCipher(),
                 query.get(MediaItem.S));
     }
 
@@ -270,7 +283,7 @@ public class YouTubeMediaParser {
         // NOTE: parser not working properly here, use url
         // NOTE: raw live format could crash exoplayer
 
-        // parser don't work as expected on this moment
+        //// parser don't work as expected on this moment
         //SimpleMPDParser parser = new SimpleMPDParser(dashContent);
         //mNewMediaItems = parser.parse();
     }
@@ -305,7 +318,7 @@ public class YouTubeMediaParser {
 
             item.setUrl(url.toString());
             item.setSignature(signature);
-            item.setS(null);
+            item.setSignatureCipher(null);
         }
 
         if (mNewMediaItems != null) { // NOTE: NPE here
@@ -317,7 +330,7 @@ public class YouTubeMediaParser {
 
     // not used code
     private void decipherSignature(SimpleYouTubeMediaItem mediaItem) {
-        String sig = mediaItem.getS();
+        String sig = mediaItem.getSignatureCipher();
         if (sig != null) {
             String url = mediaItem.getUrl();
             String newSig = CipherUtils.decipherSignature(sig);
@@ -362,6 +375,12 @@ public class YouTubeMediaParser {
         void setViewCount(String viewCount);
         String getTimestamp();
         void setTimestamp(String timestamp);
+        String getDescription();
+        void setDescription(String description);
+        String getVideoId();
+        void setVideoId(String videoId);
+        String getChannelId();
+        void setChannelId(String channelId);
     }
 
     /**
@@ -379,18 +398,5 @@ public class YouTubeMediaParser {
         }
 
         return null;
-    }
-
-    private void prepareForDecipher(MediaItem item) {
-        if (item.getCipher() == null) { // regular video
-            return;
-        }
-
-        // music video
-        Uri parseUri = ParserUtils.parseUri(item.getCipher());
-        String cipher = parseUri.getQueryParameter(MediaItem.S);
-        String url = parseUri.getQueryParameter(MediaItem.URL);
-        item.setS(cipher);
-        item.setUrl(url);
     }
 }

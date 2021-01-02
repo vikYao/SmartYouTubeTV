@@ -9,10 +9,12 @@
         <attr name="desc" format="string"/>
         <attr name="bindTo" format="reference"/>
         <attr name="onCheckedChanged" format="string"/>
+        <attr name="left_right_space" format="dimension"/>
     </declare-styleable>
 
     <declare-styleable name="LayoutToggleButton">
         <attr name="layout1" format="reference"/>
+        <attr name="layout1_1" format="reference"/>
         <attr name="layout2" format="reference"/>
     </declare-styleable>
 
@@ -22,5 +24,6 @@
     <dimen name="toggle_button_wrapper_width">60dp</dimen>
     <dimen name="toggle_button_wrapper_height">60dp</dimen>
     <dimen name="toggle_button_padding">10dp</dimen>
+    <dimen name="toggle_button_padding2">5dp</dimen>
     <dimen name="toggle_button_text_size">12sp</dimen>
 </resources>

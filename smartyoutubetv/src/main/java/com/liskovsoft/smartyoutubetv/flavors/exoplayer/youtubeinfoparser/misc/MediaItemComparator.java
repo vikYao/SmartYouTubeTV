@@ -6,11 +6,32 @@ import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers
 import java.util.Comparator;
 
 public class MediaItemComparator implements Comparator<MediaItem> {
+    public static final int ORDER_DESCENDANT = 0;
+    public static final int ORDER_ASCENDANT = 1;
+    private int mOrderType = ORDER_DESCENDANT;
+
+    public MediaItemComparator() {
+        
+    }
+
+    public MediaItemComparator(int orderType) {
+        mOrderType = orderType;
+    }
+
+    /**
+     * NOTE: Descendant sorting (better on top). High quality playback on external player.
+     */
     @Override
     public int compare(MediaItem leftItem, MediaItem rightItem) {
         if (leftItem.getGlobalSegmentList() != null ||
             rightItem.getGlobalSegmentList() != null) {
             return 1;
+        }
+
+        if (mOrderType == ORDER_ASCENDANT) {
+            MediaItem tmpItem = leftItem;
+            leftItem = rightItem;
+            rightItem = tmpItem;
         }
 
         int leftItemBitrate = leftItem.getBitrate() == null ? 0 : parseInt(leftItem.getBitrate());
@@ -19,10 +40,10 @@ public class MediaItemComparator implements Comparator<MediaItem> {
         int leftItemHeight = leftItem.getSize() == null ? 0 : parseInt(MediaItemUtils.getHeight(leftItem));
         int rightItemHeight = rightItem.getSize() == null ? 0 : parseInt(MediaItemUtils.getHeight(rightItem));
 
-        int delta = leftItemHeight - rightItemHeight;
+        int delta = rightItemHeight - leftItemHeight;
 
         if (delta == 0) {
-            delta = leftItemBitrate - rightItemBitrate;
+            delta = rightItemBitrate - leftItemBitrate;
         }
 
         return delta;

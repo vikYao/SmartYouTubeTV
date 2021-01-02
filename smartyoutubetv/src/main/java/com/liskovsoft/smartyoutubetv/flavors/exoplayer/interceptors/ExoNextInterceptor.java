@@ -3,7 +3,7 @@ package com.liskovsoft.smartyoutubetv.flavors.exoplayer.interceptors;
 import android.content.Context;
 import android.net.Uri;
 import android.webkit.WebResourceResponse;
-import com.liskovsoft.sharedutils.helpers.Helpers;
+import com.google.gson.JsonIOException;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers.JsonNextParser;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers.JsonNextParser.VideoMetadata;
@@ -32,7 +32,7 @@ public class ExoNextInterceptor extends RequestInterceptor {
     private static final String VIDEO_ID = "\"videoId\":\"%VIDEO_ID%\",";
     private final String mPostBodyReal;
     private static final String NEXT_URL = "https://www.youtube.com/youtubei/v1/next";
-    private String mNextUrl = NEXT_URL; // default url (will be changed after next intercept run
+    private String mNextUrl;
 
     public ExoNextInterceptor(Context context) {
         super(context);
@@ -55,25 +55,36 @@ public class ExoNextInterceptor extends RequestInterceptor {
      */
     @Override
     public WebResourceResponse intercept(String url) {
-        Log.d(TAG, "Video metadata is intercepted successfully");
+        Log.d(TAG, "Video metadata is intercepted successfully: " + url);
 
-        String nextUrlKey = Uri.parse(url).getQueryParameter("key");
+        if (mNextUrl == null) { // run once
+            String nextUrlKey = Uri.parse(url).getQueryParameter("key");
 
-        if (nextUrlKey != null) {
-            mNextUrl = String.format("%s?key=%s", NEXT_URL, nextUrlKey);
+            if (nextUrlKey != null) { // key found, save it
+                mNextUrl = String.format("%s?key=%s", NEXT_URL, nextUrlKey);
+            } else {
+                mNextUrl = NEXT_URL; // It's ok. User is logged in. No key used.
+            }
         }
 
         return null;
     }
 
     public VideoMetadata getMetadata(String videoId, String playlistId) {
-        InputStream response = postUrlData(mNextUrl, getBody(videoId, playlistId));
+        VideoMetadata metadata = null;
 
-        if (response == null) {
-            return null;
+        if (mNextUrl != null) {
+            InputStream response = postJsonData(mNextUrl, getBody(videoId, playlistId));
+
+            if (response != null) {
+                try {
+                    metadata = new JsonNextParser(response).extractVideoMetadata();
+                } catch (Exception e) { // FIX: caused by java.net.SocketTimeoutException: timeout
+                    e.printStackTrace();
+                    Log.e(TAG, "Error: Response timeout: " + e.getMessage());
+                }
+            }
         }
-
-        VideoMetadata metadata = new JsonNextParser(Helpers.toString(response)).extractVideoMetadata();
 
         return metadata;
     }

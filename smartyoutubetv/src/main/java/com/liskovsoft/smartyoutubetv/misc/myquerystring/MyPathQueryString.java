@@ -1,7 +1,8 @@
 package com.liskovsoft.smartyoutubetv.misc.myquerystring;
 
+import androidx.annotation.NonNull;
+
 import com.liskovsoft.sharedutils.helpers.Helpers;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -11,6 +12,8 @@ import java.util.regex.Pattern;
  * Regex: \/key\/([^\/]*)
  */
 public class MyPathQueryString implements MyQueryString {
+    private static final Pattern VALIDATION_PATTERN_1 = Pattern.compile("^[^&=]*$");
+    private static final Pattern VALIDATION_PATTERN_2 = Pattern.compile("\\/[^\\/]+\\/[^\\/]+");
     private String mUrl;
 
     public MyPathQueryString(String url) {
@@ -57,6 +60,11 @@ public class MyPathQueryString implements MyQueryString {
         set(key, String.valueOf(value));
     }
 
+    @Override
+    public void set(String key, int value) {
+        set(key, String.valueOf(value));
+    }
+
     private boolean replace(String key, String newValue) {
         if (mUrl == null) {
             return false;
@@ -82,7 +90,7 @@ public class MyPathQueryString implements MyQueryString {
         mUrl = mUrl.replaceAll(String.format(template, key), "");
     }
 
-    @NotNull
+    @NonNull
     @Override
     public String toString() {
         return mUrl;
@@ -103,7 +111,7 @@ public class MyPathQueryString implements MyQueryString {
             return false;
         }
 
-        return Helpers.matchAll(mUrl, "^[^&=]*$", "\\/[^\\/]+\\/[^\\/]+");
+        return Helpers.matchAll(mUrl, VALIDATION_PATTERN_1, VALIDATION_PATTERN_2);
     }
 
     @Override

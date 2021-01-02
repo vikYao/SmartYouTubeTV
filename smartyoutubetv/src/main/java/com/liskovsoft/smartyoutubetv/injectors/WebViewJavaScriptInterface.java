@@ -3,12 +3,13 @@ package com.liskovsoft.smartyoutubetv.injectors;
 import android.app.Activity;
 import android.content.Context;
 import android.os.Build;
+import android.os.Build.VERSION;
 import android.os.Handler;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.webkit.JavascriptInterface;
 import com.liskovsoft.browser.Browser;
 import com.liskovsoft.browser.Tab;
+import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.R;
 import com.liskovsoft.sharedutils.helpers.AppInfoHelpers;
@@ -77,7 +78,9 @@ public class WebViewJavaScriptInterface {
     public String getAppVersion() {
         String mode = CommonApplication.getPreferences().getDefaultDisplayMode();
         String modeString = mode == null ? "" : " " + mode;
-        return AppInfoHelpers.getAppVersion(mContext) + modeString;
+        int dpi = Helpers.getDeviceDpi(mContext);
+        String dpiString = dpi == 0 ? "" : " " + dpi + " dpi";
+        return AppInfoHelpers.getAppVersion(mContext) + modeString + dpiString;
     }
 
     @JavascriptInterface
@@ -106,7 +109,7 @@ public class WebViewJavaScriptInterface {
 
     @JavascriptInterface
     @org.xwalk.core.JavascriptInterface
-    private void reloadTab() {
+    public void reloadTab() {
         Handler handler = new Handler(mContext.getMainLooper());
         handler.post(() -> {
             for (Tab tab : mTabs) {
@@ -162,6 +165,12 @@ public class WebViewJavaScriptInterface {
 
     @JavascriptInterface
     @org.xwalk.core.JavascriptInterface
+    public int getApiLevel() {
+        return VERSION.SDK_INT;
+    }
+
+    @JavascriptInterface
+    @org.xwalk.core.JavascriptInterface
     public String getEngineType() {
         return Browser.getEngineType().name();
     }
@@ -208,5 +217,23 @@ public class WebViewJavaScriptInterface {
     public int getPlaybackWorking() {
         SmartPreferences prefs = SmartPreferences.instance(mContext);
         return prefs.getPlaybackWorking();
+    }
+
+    @JavascriptInterface
+    @org.xwalk.core.JavascriptInterface
+    public boolean logToFileEnabled() {
+        return Log.getLogType().equals(Log.LOG_TYPE_FILE);
+    }
+
+    @JavascriptInterface
+    @org.xwalk.core.JavascriptInterface
+    public boolean isMirrorEnabled() {
+        return CommonApplication.getPreferences().isMirrorEnabled();
+    }
+
+    @JavascriptInterface
+    @org.xwalk.core.JavascriptInterface
+    public boolean isBrowserInBackground() {
+        return CommonApplication.getPreferences().isBrowserInBackground();
     }
 }

@@ -1,6 +1,10 @@
 package com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers;
 
+import android.content.Context;
 import android.net.Uri;
+import com.liskovsoft.sharedutils.helpers.FileHelpers;
+import com.liskovsoft.sharedutils.helpers.MessageHelpers;
+import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.hls.UrlListBuilder;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.hls.SimpleUrlListBuilder;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.mpd.MPDBuilder;
@@ -10,10 +14,13 @@ import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.youtubeinfoparser.parsers.JsonInfoParser.Subtitle;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 
+import java.io.File;
 import java.io.InputStream;
 
 public class SimpleYouTubeInfoParser implements YouTubeInfoParser {
+    private static final String TAG = SimpleYouTubeInfoParser.class.getSimpleName();
     private final String[] mContent;
+    private final Context mContext;
 
     private class MergeMediaVisitor extends YouTubeInfoVisitor {
         private final OnMediaFoundCallback mMediaFoundCallback;
@@ -85,7 +92,7 @@ public class SimpleYouTubeInfoParser implements YouTubeInfoParser {
             // callback on the last loop (resolve problems with async processing)
 
             if (mInfo != null) {
-                mMediaFoundCallback.onInfoFound(mInfo);
+                mMediaFoundCallback.onGenericInfoFound(mInfo);
             }
 
             if (mTrackingUrl != null) {
@@ -96,15 +103,31 @@ public class SimpleYouTubeInfoParser implements YouTubeInfoParser {
                 mMediaFoundCallback.onStorySpecFound(mSpec);
             }
 
-            if (mHlsUrl != null) { // live stream usually
+            if (mHlsUrl != null) { // Live streams
                 mMediaFoundCallback.onHLSFound(mHlsUrl);
-            } else if (mDashUrl != null) { // dash live stream, contains more formats
+            }
+
+            if (mDashUrl != null) { // BROKEN: Live streams (more formats, has errors)
                 mMediaFoundCallback.onDashUrlFound(mDashUrl);
-            } else if (!mMPDBuilder.isEmpty()) {
-                mMediaFoundCallback.onDashMPDFound(mMPDBuilder.build());
-            } else if (!mUrlListBuilder.isEmpty()) { // fallback to the simple formats
+            }
+
+            if (!mMPDBuilder.isEmpty()) { // Regular videos (4K)
+                if (mMPDBuilder.isDynamic()) {
+                    // TODO: fix dynamic streams
+                    //File destination = new File(FileHelpers.getCacheDir(mContext), "dynamic.mpd");
+                    //FileHelpers.streamToFile(mMPDBuilder.build(), destination);
+                    //mMediaFoundCallback.onDashUrlFound(Uri.parse(destination.getAbsolutePath()));
+                } else {
+                    mMediaFoundCallback.onDashMPDFound(mMPDBuilder);
+                }
+            }
+
+            // Low quality videos
+            if (!mUrlListBuilder.isEmpty()) {
                 mMediaFoundCallback.onUrlListFound(mUrlListBuilder.buildUriList());
             }
+
+            Log.d(TAG, "Media parsing done!");
 
             mMediaFoundCallback.onDone();
         }
@@ -112,9 +135,11 @@ public class SimpleYouTubeInfoParser implements YouTubeInfoParser {
 
     /**
      * One or multiple <em>get_video_info</em> files as a source
+     *
      * @param content get_video_info content
      */
-    public SimpleYouTubeInfoParser(InputStream ...content) {
+    public SimpleYouTubeInfoParser(Context context, InputStream... content) {
+        mContext = context;
         mContent = new String[content.length];
         readContent(content);
     }

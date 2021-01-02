@@ -2,13 +2,14 @@ package com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.support;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 import com.google.android.exoplayer2.C;
+import com.liskovsoft.exoplayeractivity.R;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.helpers.PlayerUtil;
 
 public final class ExoPreferences {
     private static final String SHARED_PREFERENCES_NAME = ExoPreferences.class.getName();
     private static ExoPreferences sInstance;
-    private final Context mContext;
     private SharedPreferences mPrefs;
     private static final String SELECTED_TRACK_ID = "selectedTrackId";
     private static final String SELECTED_TRACK_HEIGHT = "selectedTrackHeight";
@@ -26,6 +27,10 @@ public final class ExoPreferences {
     private static final String RESTORE_SPEED = "restoreSpeed";
     public static final String FORMAT_ANY = "format_any";
     private static final String AFR_DELAY_ENABLED = "afr_delay_enabled";
+    private static final String AFR_RESOLUTION_SWITCH_ENABLED = "afr_resolution_switch_enabled";
+    private static final String AFR_SWITCH_PAUSE_TIME = "afr_switch_pause_time";
+    private static final String AFR_60FPS_CORRECTION = "afr_60fps_correction";
+    private static final String AUDIO_DELAY_MS = "audio_delay_ms";
     private boolean mForceRestoreSpeed;
 
     public static ExoPreferences instance(Context ctx) {
@@ -34,9 +39,9 @@ public final class ExoPreferences {
         return sInstance;
     }
 
-    public ExoPreferences(Context context) {
-        mContext = context.getApplicationContext();
+    private ExoPreferences(Context context) {
         mPrefs = context.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE);
+        PreferenceManager.setDefaultValues(context, SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE, R.xml.exo_preferences, true);
     }
 
     public String getSelectedTrackId() {
@@ -51,11 +56,13 @@ public final class ExoPreferences {
 
     /**
      * By default (first run or user never opened track dialog)<br/>
-     * select no more than 1080p format for legacy devices support
+     * select no more than 1080p format for legacy devices support.<br/>
+     * Set to 1080 to select fhd track by default.<br/>
+     * Set to 0 to disable any restrictions.
      * @return track height
      */
     public int getSelectedTrackHeight() {
-        return mPrefs.getInt(SELECTED_TRACK_HEIGHT, 1080); // select fhd track by default
+        return mPrefs.getInt(SELECTED_TRACK_HEIGHT, 1080);
     }
 
     public void setSelectedTrackHeight(int height) {
@@ -247,5 +254,45 @@ public final class ExoPreferences {
         mPrefs.edit()
                 .putBoolean(AFR_DELAY_ENABLED, enabled)
                 .apply();
+    }
+
+    public boolean isAfrResolutionSwitchEnabled() {
+        return mPrefs.getBoolean(AFR_RESOLUTION_SWITCH_ENABLED, false);
+    }
+
+    public void setAfrResolutionSwitchEnabled(boolean enabled) {
+        mPrefs.edit()
+                .putBoolean(AFR_RESOLUTION_SWITCH_ENABLED, enabled)
+                .apply();
+    }
+
+    public void setAfrDelayTime(long pauseMS) {
+        mPrefs.edit()
+                .putLong(AFR_SWITCH_PAUSE_TIME, pauseMS)
+                .apply();
+    }
+
+    public long getAfrDelayTime() {
+        return mPrefs.getLong(AFR_SWITCH_PAUSE_TIME, 3_000);
+    }
+
+    public int getAudioDelayMs() {
+        return mPrefs.getInt(AUDIO_DELAY_MS, 0);
+    }
+
+    public void setAudioDelayMs(int delay) {
+        mPrefs.edit()
+                .putInt(AUDIO_DELAY_MS, delay)
+                .apply();
+    }
+
+    public void setAfr60fpsCorrectionEnabled(boolean checked) {
+        mPrefs.edit()
+                .putBoolean(AFR_60FPS_CORRECTION, checked)
+                .apply();
+    }
+
+    public boolean isAfr60fpsCorrectionEnabled() {
+        return mPrefs.getBoolean(AFR_60FPS_CORRECTION, true);
     }
 }

@@ -1,19 +1,32 @@
 package com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.autoframerate;
 
+import android.os.Handler;
+import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.liskovsoft.exoplayeractivity.R;
 import com.liskovsoft.sharedutils.helpers.Helpers;
+import com.liskovsoft.smartyoutubetv.CommonApplication;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.ExoPlayerFragment;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.PlayerEventListener;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.autoframerate.DisplayHolder.Mode;
 import com.liskovsoft.smartyoutubetv.flavors.exoplayer.player.autoframerate.DisplaySyncHelper.AutoFrameRateListener;
 
 public class AutoFrameRateManager implements PlayerEventListener, AutoFrameRateListener {
-    private static final long AFR_MSG_HIDE_DELAY = 5_000;
-    protected final ExoPlayerFragment mPlayerFragment;
+    protected ExoPlayerFragment mPlayerFragment;
     protected AutoFrameRateHelper mAutoFrameRateHelper;
+    private Handler mHandler;
+    private final Runnable mPlayerPlay = () -> {
+        if (mPlayerFragment != null) {
+            SimpleExoPlayer player = mPlayerFragment.getPlayer();
+            if (player != null) {
+                player.setPlayWhenReady(true);
+            }
+            mPlayerFragment.setAfrApplying(false);
+        }
+    };
 
     public AutoFrameRateManager(ExoPlayerFragment playerFragment) {
         mPlayerFragment = playerFragment;
+        mHandler = new Handler();
     }
 
     @Override
@@ -23,6 +36,11 @@ public class AutoFrameRateManager implements PlayerEventListener, AutoFrameRateL
         }
 
         mAutoFrameRateHelper.saveOriginalState();
+
+        //if (CommonApplication.getPreferences().getUgoos50HZFix()) {
+        //    mAutoFrameRateHelper.applyModeChangeFix();
+        //}
+
         mAutoFrameRateHelper.setListener(this);
     }
 
@@ -36,6 +54,8 @@ public class AutoFrameRateManager implements PlayerEventListener, AutoFrameRateL
         if (mAutoFrameRateHelper != null) {
             mAutoFrameRateHelper.setPlayer(null);
         }
+
+        mHandler.removeCallbacks(mPlayerPlay);
     }
 
     @Override
@@ -69,7 +89,7 @@ public class AutoFrameRateManager implements PlayerEventListener, AutoFrameRateL
             return false;
         }
 
-        return mAutoFrameRateHelper.getDelayEnabled();
+        return mAutoFrameRateHelper.isDelayEnabled();
     }
 
     public void setDelayEnabled(boolean enabled) {
@@ -78,14 +98,42 @@ public class AutoFrameRateManager implements PlayerEventListener, AutoFrameRateL
         }
     }
 
+    public boolean isResolutionSwitchEnabled() {
+        if (mAutoFrameRateHelper == null) {
+            return false;
+        }
+
+        return mAutoFrameRateHelper.isResolutionSwitchEnabled();
+    }
+
+    public void setResolutionSwitchEnabled(boolean enabled) {
+        if (mAutoFrameRateHelper != null) {
+            mAutoFrameRateHelper.setResolutionSwitchEnabled(enabled);
+        }
+    }
+
+    public long getDelayTime() {
+        if (mAutoFrameRateHelper == null) {
+            return 0;
+        }
+
+        return mAutoFrameRateHelper.getDelayTime();
+    }
+
+    public void setDelayTime(long pauseMS) {
+        if (mAutoFrameRateHelper != null) {
+            mAutoFrameRateHelper.setDelayTime(pauseMS);
+        }
+    }
+
     @Override
     public void onModeStart(Mode newMode) {
         if (isDelayEnabled() && newMode != null) {
-            mPlayerFragment.startPlaybackDelay(AFR_MSG_HIDE_DELAY);
+            startPlaybackDelay(getDelayTime());
 
             String modeStr = String.format("%sx%s@%s", newMode.getPhysicalWidth(), newMode.getPhysicalHeight(), Helpers.formatFloat(newMode.getRefreshRate()));
             String msg = mPlayerFragment.getResources().getString(R.string.changing_video_frame_rate, modeStr);
-            mPlayerFragment.showMessage(msg, AFR_MSG_HIDE_DELAY);
+            mPlayerFragment.showMessage(msg, getDelayTime());
         }
     }
 
@@ -97,5 +145,28 @@ public class AutoFrameRateManager implements PlayerEventListener, AutoFrameRateL
     @Override
     public void onAppResume() {
         // restore last state
+    }
+
+    private void startPlaybackDelay(long delay) {
+        if (mPlayerFragment.getPlayer() != null) {
+            mPlayerFragment.setAfrApplying(true);
+            mPlayerFragment.getPlayer().setPlayWhenReady(false);
+
+            mHandler.postDelayed(mPlayerPlay, delay);
+        }
+    }
+
+    public boolean is60fpsCorrectionEnabled() {
+        if (mAutoFrameRateHelper == null) {
+            return false;
+        }
+
+        return mAutoFrameRateHelper.is60fpsCorrectionEnabled();
+    }
+
+    public void set60fpsCorrectionEnabled(boolean checked) {
+        if (mAutoFrameRateHelper != null) {
+            mAutoFrameRateHelper.set60fpsCorrectionEnabled(checked);
+        }
     }
 }
